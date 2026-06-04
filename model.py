@@ -279,13 +279,19 @@ class ConditionalDDPMUNet(nn.Module):
         Llamar antes de entrenar la etapa 2 (ControlNet).
         El ControlNet en sí NO se congela porque es un módulo separado.
         """
-        for param in self.parameters():
-            param.requires_grad = False
+        # Freeze all parameters except those belonging to the ControlNet
+        for name, param in self.named_parameters():
+            if self.controlnet is not None and name.startswith("controlnet."):
+                # keep ControlNet parameters trainable
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
 
     def unfreeze_unet(self):
         """
         Descongela el U-Net base (por si querés fine-tunear todo junto después).
         """
+        # Unfreeze all parameters (including ControlNet if present)
         for param in self.parameters():
             param.requires_grad = True
 
