@@ -1,2 +1,7 @@
 data/
-data.zip
+big-lama/
+*.pth
+*.ckpt
+*.pt
+*.safetensors
+external/lama/
