@@ -5,3 +5,4 @@ big-lama/
 *.pt
 *.safetensors
 external/lama/
+__pycache__/
