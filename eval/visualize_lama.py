@@ -112,7 +112,7 @@ def visualize_samples(model, dataset, use_sar, device, n_samples=4, save_path=No
                 images.append(to_sar(s1));   cmaps.append("gray")
             images.append(to_gray(mask));    cmaps.append("gray")
             images.append(to_rgb(output));   cmaps.append(None)
-            images.append(to_rgb(clear));    cmaps.append(None)
+            images.append(to_rgb(clear, bands=(2, 1, 0)));    cmaps.append(None)
 
             for col, (img, cmap) in enumerate(zip(images, cmaps)):
                 ax = fig.add_subplot(gs[row, col])

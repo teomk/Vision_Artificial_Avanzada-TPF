@@ -11,8 +11,6 @@ sys.path.append(str(LAMA_DIR))
 from saicinpainting.training.modules.ffc import FFCResNetGenerator
 
 
-# ── Adaptadores de primera conv ────────────────────────────────────────
-
 def adapt_conv_4_to_7(old_weight, new_weight):
     """big-lama (4 canales: RGB+mask) → S2 sin SAR (7 canales: 6 bandas S2 + mask)"""
     adapted = new_weight.clone()
@@ -53,7 +51,6 @@ def adapt_conv_7_to_9(old_weight, new_weight):
     return torch.cat([old_weight, s1_vv, s1_vh], dim=1).float()         # [out, 9, k, k]
 
 
-# ── Función genérica de adaptación ────────────────────────────────────
 
 def adapt_model(ckpt_state, input_nc, output_nc):
     model = FFCResNetGenerator(
@@ -121,14 +118,9 @@ def adapt_model(ckpt_state, input_nc, output_nc):
     return model
 
 
-
-
-
-# ── Main ───────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
-    # python models/lama_model.py --config configs/lama_no_sar.yaml
-    # python models/lama_model.py --config configs/lama_sar.yaml
+    # python models/lama_model.py --config configs/adapt_lama_no_sar.yaml
+    # python models/lama_model.py --config configs/adapt_lama_sar.yaml
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True,
@@ -145,7 +137,7 @@ if __name__ == "__main__":
 
     cfg_adapt = cfg["adapt"]
 
-    # CLI overrides yaml si se especifica
+    # CLI overrides yaml
     if args.sar:
         cfg["sar"] = True
     if args.pretrained_path:
@@ -153,7 +145,6 @@ if __name__ == "__main__":
     if args.save_name:
         cfg_adapt["save_name"] = args.save_name
 
-    # Usar cfg desde acá
     use_sar   = cfg.get("sar", False)
     input_nc  = 9 if use_sar else 7
 
@@ -172,8 +163,6 @@ if __name__ == "__main__":
 
     if not save_path.parent.exists():
         save_path.parent.mkdir(parents=True, exist_ok=True)
-
-    
 
     print(f"\nModo     : {'con SAR (9 canales)' if use_sar else 'sin SAR (7 canales)'}")
     print(f"Guardando: {save_path}\n")

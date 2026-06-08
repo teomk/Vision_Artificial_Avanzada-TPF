@@ -50,10 +50,13 @@ def train(model, loader_train, cfg, use_sar, save_path, device):
     loss_fn = torch.nn.L1Loss()
     history = {"train_first_epochs": [], "train_full_epochs": []}
 
-    epochs_frozen = int(cfg.get("epochs_frozen", 3))
-    epochs_full   = int(cfg.get("epochs_full",   10))
+    epochs_frozen = int(cfg.get("epochs_frozen", 10))
+    epochs_full   = int(cfg.get("epochs_full",   100))
     lr_frozen     = float(cfg.get("lr_frozen",   1e-3))
     lr_full       = float(cfg.get("lr_full",     1e-4))
+
+    print("epocs_frozen:", epochs_frozen)
+    print("epocs_full:", epochs_full)
 
     modified = {"model.1.ffc.convl2l.weight", "model.34.weight", "model.34.bias"}
 
@@ -128,7 +131,7 @@ def _run_epochs(model, loader_train, optimizer, loss_fn, n_epochs, phase, use_sa
             train_loss += loss.item()
             pbar.set_postfix(loss=f"{loss.item():.6f}")
             # #por ahora un solo batch por época para probar que corre
-            break
+            # break
 
         train_loss /= len(loader_train)
         epoch_losses.append(train_loss)
