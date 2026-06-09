@@ -19,7 +19,7 @@ sys.path.append(str(UTILS_DIR))
 
 from dataset import SEN12MSCRDataset
 
-from dbcr_no_sar_naf import DBCRNoSARNAF
+from dbcr_simple import DBCRSimple
 
 from hf_utils import (
     download_model,
@@ -125,13 +125,41 @@ def sam(pred, target, eps=1e-8):
 
     return torch.rad2deg(angle).mean().item()
 
-def evaluate(
-    model,
-    loader,
-    device,
-    T=1000
-):
+def sigmoid_scheduler(T, sigmoid_k, t, device):
+    tau = torch.clamp(t.float() / T, 0.0, 1.0)
+    s = torch.sigmoid((tau - 0.5) * sigmoid_k)
+    s_min = torch.sigmoid(torch.tensor(-0.5 * sigmoid_k, device=device))
+    s_max = torch.sigmoid(torch.tensor(0.5 * sigmoid_k, device=device))
+    alpha = torch.clamp((s - s_min) / (s_max - s_min), 0.0, 1.0)
+    return alpha[:, None, None, None]
 
+def inference(model, s2_cloudy, device, T=1000, steps=10):
+    """
+    Inferencia iterativa del diffusion bridge.
+    steps: cuántos pasos de refinamiento (10-50 suele ser suficiente)
+    """
+    x_t = s2_cloudy.clone()  # arrancamos en x_T = cloudy
+    
+    # Timesteps de T a 1, uniformemente espaciados
+    timesteps = torch.linspace(T, 1, steps).long().to(device)
+    
+    with torch.no_grad():
+        for t_val in timesteps:
+            t = t_val.repeat(x_t.shape[0])
+            pred_clean = model(x_t=x_t, t=t, s2_cloudy=s2_cloudy)
+            
+            # Interpolamos x_t hacia la predicción según el schedule
+            alpha_t = sigmoid_scheduler(T, sigmoid_k=10.0, t=t, device=device)
+            alpha_prev = sigmoid_scheduler(T, sigmoid_k=10.0, 
+                                           t=(t_val - T//steps).clamp(min=1).repeat(x_t.shape[0]), 
+                                           device=device)
+            
+            # x_{t-1} = mezcla entre pred_clean y s2_cloudy según alpha_prev
+            x_t = (1.0 - alpha_prev) * pred_clean + alpha_prev * s2_cloudy
+    
+    return pred_clean
+
+def evaluate(model, loader, device, T=1000, steps = 10):
     model.eval()
 
     total_mae = 0
@@ -150,20 +178,7 @@ def evaluate(
             cloudy = cloudy.to(device)
             clean = clean.to(device)
 
-            B = cloudy.shape[0]
-
-            t = torch.full(
-                (B,),
-                T,
-                device=device,
-                dtype=torch.long
-            )
-
-            pred = model(
-                x_t=cloudy,
-                t=t,
-                s2_cloudy=cloudy
-            )
+            pred = inference(model, cloudy, device, T=T, steps=steps)
 
             pred = pred.clamp(0, 1)
 
@@ -173,7 +188,7 @@ def evaluate(
             total_sam += sam(pred, clean)
 
             n_batches += 1
-            break
+            # break
 
     metrics = {
         "mae": total_mae / n_batches,
@@ -224,7 +239,7 @@ if __name__ == "__main__":
         map_location=device,
     )
 
-    model = DBCRNoSARNAF(
+    model = DBCRSimple(
         image_channels=6,
         condition_channels=6,
         base_channels=64,
@@ -243,17 +258,14 @@ if __name__ == "__main__":
 
     loader = DataLoader(
         ds,
-        batch_size=4,
+        batch_size=8,
         shuffle=False,
         num_workers=2,
     )
 
-    metrics = evaluate(
-        model=model,
-        loader=loader,
-        device=device,
-        T=1000,
-    )
+    steps = 10
+
+    metrics = evaluate(model=model, loader=loader, device=device, T=1000, steps=steps)
 
     print("\nRESULTADOS")
     print("=" * 40)

@@ -174,6 +174,7 @@ def register_eval(
 
 # ── Evaluación ─────────────────────────────────────────────────────────
 
+
 def evaluate(model, loader, use_sar, device):
     model.eval()
 

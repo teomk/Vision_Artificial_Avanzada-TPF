@@ -260,7 +260,7 @@ class ConditionEncoderNAF(nn.Module):
 # Diffusion Bridge + NAFBlocks
 # -------------------------
 
-class DBCRNoSARNAF(nn.Module):
+class DBCRSimple(nn.Module):
     """
     Modelo 1:
     - Sin SAR

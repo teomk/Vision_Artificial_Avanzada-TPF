@@ -100,17 +100,20 @@ def train(model, loader_train, cfg, use_sar, device):
     }
 
     # ── Fase 2: capas de upsampling + capas modificadas ───────────────────────
-    trainable_prefixes_phase2 = [
-        "model.1.ffc.convl2l.weight",
-        "model.34.weight",
-        "model.34.bias",
-        "model.24", "model.25",
-        "model.27", "model.28",
-        "model.30", "model.31",
-    ]
+    # trainable_prefixes_phase2 = [
+    #     "model.1.ffc.convl2l.weight",
+    #     "model.34.weight",
+    #     "model.34.bias",
+    #     "model.24", "model.25",
+    #     "model.27", "model.28",
+    #     "model.30", "model.31",
+    # ]
+
+    # for name, param in model.named_parameters():
+    #     param.requires_grad = any(name.startswith(k) for k in trainable_prefixes_phase2)
 
     for name, param in model.named_parameters():
-        param.requires_grad = any(name.startswith(k) for k in trainable_prefixes_phase2)
+        param.requires_grad = True  # Descongelar todo
 
     trainable = [p for p in model.parameters() if p.requires_grad]
     total_params        = sum(p.numel() for p in model.parameters())
@@ -127,7 +130,8 @@ def train(model, loader_train, cfg, use_sar, device):
         "epochs":           epochs_full,
         "lr":               lr_full,
         "trainable_params": trainable_params_phase2,
-        "trainable_layers": trainable_prefixes_phase2,
+        # "trainable_layers": trainable_prefixes_phase2,
+        "trainable_layers": "todas",
     }
 
     return history, phase1_info, phase2_info
@@ -155,7 +159,7 @@ def _run_epochs(model, loader_train, optimizer, loss_fn, n_epochs, phase, use_sa
             train_loss += loss.item()
             pbar.set_postfix(loss=f"{loss.item():.6f}")
             #un solo batch para probar:
-            break
+            # break
 
         train_loss /= len(loader_train)
         epoch_losses.append(train_loss)

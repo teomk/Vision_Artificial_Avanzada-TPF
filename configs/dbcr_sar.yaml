@@ -1,0 +1,15 @@
+sar: true
+
+train:
+  batch_size: 8
+  num_workers: 2
+  num_epochs: 15
+  lr: 1e-4
+  T: 1000
+  sigmoid_k: 10.0
+
+huggingface:
+  repo_id: "LucioLuque/lama"
+  save_filename: "dbcr_sar_naf_v1.pth"
+  version: 3
+  notes: "Con SAR concat, lr=1e-4, grad clip, scheduler"
