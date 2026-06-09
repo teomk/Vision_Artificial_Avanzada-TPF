@@ -1,20 +1,26 @@
 sar: false
 
 adapt:
-  pretrained_path: null          # null = big-lama por defecto
-  save_name: lama_no_sar_pretrained.pth
+  pretrained_path: "big-lama/models/best.ckpt"
 
 train:
-  model_path: saved_models/lama_no_sar_pretrained.pth
-  save_path:  saved_models/lama_no_sar_finetuned.pth
+  # model_path: saved_models/lama_no_sar_pretrained.pth
+  # save_path:  saved_models/lama_no_sar_finetuned.pth
   batch_size: 4
   num_workers: 2
-  epochs_frozen: 10
-  epochs_full:   100
+  epochs_frozen: 1
+  epochs_full: 1
   lr_frozen: 1e-3
   lr_full:   1e-4
 
 eval:
-  model_path: saved_models/lama_no_sar_finetuned.pth
+  # model_path: saved_models/lama_no_sar_finetuned.pth
   batch_size: 4
   num_workers: 2
+
+huggingface:
+  repo_id: "LucioLuque/lama"
+  base_filename: "lama_no_sar_pretrained_v1.pth"  # modelo base para train
+  save_prefix: "lama_no_sar_finetuned"            # prefijo para guardar finetuned (train)
+  no_sar_fine_prefix: "lama_no_sar_finetuned"     # prefijo fuente para adapt SAR (no usado aquí)
+  adapt_save_prefix: "lama_no_sar_pretrained"     # prefijo para guardar el adaptado desde big-lama

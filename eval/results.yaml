@@ -1,0 +1,11 @@
+models:
+  lama_no_sar:
+    lama_no_sar_finetuned_v1:
+      filename: lama_no_sar_finetuned_v1.pth
+      eval:
+        split: test
+        date: '2026-06-08'
+        mae: 0.155506
+        psnr: 10.8411
+        ssim: 0.617439
+        sam: 25.0345

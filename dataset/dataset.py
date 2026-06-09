@@ -147,9 +147,11 @@ class SEN12MSCRDataset(Dataset):
         s1_mean:    Optional[np.ndarray] = S1_MEAN_DEFAULT,
         s1_std:     Optional[np.ndarray] = S1_STD_DEFAULT,
         base_dir:   Path = Path("."),
+        include_mask: bool = True,
     ):
         self.split      = split
         self.include_s1 = include_s1
+        self.include_mask = include_mask
         self.transform  = transform
         self.s1_mean    = s1_mean
         self.s1_std     = s1_std
@@ -170,7 +172,7 @@ class SEN12MSCRDataset(Dataset):
                 "Verificá que las carpetas y máscaras estén generadas."
             )
 
-        print(f"[SEN12MSCRDataset] split={split} | triples={len(self.triples)} | include_s1={include_s1}")
+        print(f"[SEN12MSCRDataset] split={split} | triples={len(self.triples)} | include_s1={include_s1} | include_mask={include_mask}")
 
     def __len__(self) -> int:
         return len(self.triples)
@@ -222,20 +224,33 @@ class SEN12MSCRDataset(Dataset):
 
         # ── Output según flag ──────────────────────────────────────────
         if self.include_s1:
-            # Con SAR: (s1, s2_cloudy, mask) → target: s2_clear
+            if self.include_mask:
+                # Con SAR y máscara: (s1, s2_cloudy, mask) → target: s2_clear
+                return (
+                    sample["s1"],
+                    sample["s2_cloudy"],
+                    sample["mask"],
+                    sample["s2_clear"],
+                )
+            # Con SAR: (s1, s2_cloudy) → target: s2_clear
             return (
                 sample["s1"],
                 sample["s2_cloudy"],
-                sample["mask"],
                 sample["s2_clear"],
             )
         else:
-            # Sin SAR: (s2_cloudy, mask) → target: s2_clear
+            if self.include_mask:
+                # Sin SAR pero con máscara: (s2_cloudy, mask) → target: s2_clear
+                return (
+                    sample["s2_cloudy"],
+                    sample["mask"],
+                    sample["s2_clear"],
+                )
+            # Sin SAR: (s2_cloudy) → target: s2_clear
             return (
                 sample["s2_cloudy"],
-                sample["mask"],
                 sample["s2_clear"],
-            )
+             )
 
 
 # ─────────────────────────────────────────
