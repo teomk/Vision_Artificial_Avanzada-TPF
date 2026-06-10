@@ -59,7 +59,6 @@ def inference(model, cloudy_b, condition, device, T=1000, steps=10):
 
 
 def visualize_samples(model, dataset, device, use_sar=False, n_samples=4, T=1000, steps=10, save_path=None, seed=17):
-    steps =1000
     model.eval()
     np.random.seed(seed)
     indices = np.random.choice(len(dataset), n_samples, replace=False)
@@ -98,7 +97,7 @@ def visualize_samples(model, dataset, device, use_sar=False, n_samples=4, T=1000
 
 
 if __name__ == "__main__":
-    # python visualize/visualize_dbcr.py --config configs/dbcr_no_sar.yaml
+    # python eval/visualize_dbcr.py --config configs/dbcr_no_sar.yaml
 
 
 
