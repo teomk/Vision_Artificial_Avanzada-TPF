@@ -145,8 +145,8 @@ def register_eval(filename, *, metrics, split, use_sar, steps, yaml_path="eval/r
 # ── Main ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # python eval/eval_dbcr.py --config configs/dbcr_no_sar.yaml
-    # python eval/eval_dbcr.py --config configs/dbcr_sar.yaml --split test --steps 10
+    # python eval/eval_dbcr_simple.py --config configs/dbcr_no_sar.yaml
+    # python eval/eval_dbcr_simple.py --config configs/dbcr_sar.yaml --split test --steps 10
     parser = argparse.ArgumentParser(description="Evaluar DBCR (SAR o No-SAR)")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
     parser.add_argument("--split", type=str, default="test", choices=["train", "test"], help="Split a evaluar (default: test)")

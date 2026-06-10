@@ -4,8 +4,38 @@ models:
       filename: lama_no_sar_finetuned_v1.pth
       eval:
         split: test
-        date: '2026-06-08'
-        mae: 0.155506
-        psnr: 10.8411
-        ssim: 0.617439
-        sam: 25.0345
+        date: '2026-06-10'
+        mae: 0.075058
+        psnr: 23.428
+        ssim: 0.75516
+        sam: 14.8863
+    lama_no_sar_finetuned_v2:
+      filename: lama_no_sar_finetuned_v2.pth
+      eval:
+        split: test
+        date: '2026-06-10'
+        mae: 0.042637
+        psnr: 25.0242
+        ssim: 0.806932
+        sam: 15.7648
+  dbcr_no_sar:
+    dbcr_no_sar_naf_v2:
+      filename: dbcr_no_sar_naf_v2.pth
+      eval:
+        split: test
+        date: '2026-06-10'
+        steps: 10
+        mae: 0.031283
+        psnr: 27.5822
+        ssim: 0.80682
+        sam: 12.7846
+    dbcr_no_sar_naf_v3:
+      filename: dbcr_no_sar_naf_v3.pth
+      eval:
+        split: test
+        date: '2026-06-10'
+        steps: 10
+        mae: 0.033917
+        psnr: 26.6989
+        ssim: 0.79812
+        sam: 11.1345

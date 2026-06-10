@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pathlib import Path
 from tqdm import tqdm
+import yaml
 
 import argparse
 from torch.utils.data import DataLoader
@@ -193,6 +194,7 @@ def fit(model, train_loader, lr , device, num_epochs=50, T=1000, sigmoid_k=10.0)
 # ──────────────────────────────────────────────────────────────────────────────
  
 if __name__ == "__main__":
+    # python train/train_dbcr_simple.py --config configs/dbcr_no_sar.yaml
  
     parser = argparse.ArgumentParser(description="Entrenar DBCR (SAR o No-SAR)")
     parser.add_argument(
@@ -256,7 +258,7 @@ if __name__ == "__main__":
     # Entrenar
     history = fit(
         model=model, train_loader=loader_train,
-        lr=lr, use_sar=use_sar, device=device,
+        lr=lr, device=device,
         num_epochs=num_epochs, T=T, sigmoid_k=sigmoid_k
     )
  
@@ -286,4 +288,28 @@ if __name__ == "__main__":
         },
         notes=notes,
     )
+
+    history_data = {
+    "train_loss": history["train_loss"],
+    "config": {
+        "num_epochs": num_epochs,
+        "lr": lr,
+        "batch_size": batch_size,
+        "T": T,
+        "sigmoid_k": sigmoid_k,
+        "use_sar": use_sar,
+        "num_parameters": parameters,
+        }
+    }
+
+    history_dir = ROOT / "training_history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+
+    history_filename = save_filename.replace(".pth", "_history.yaml")
+    history_path = history_dir / history_filename
+
+    with open(history_path, "w") as f:
+        yaml.safe_dump(history_data, f, sort_keys=False)
+
+    print(f"History guardado en: {history_path}")
  

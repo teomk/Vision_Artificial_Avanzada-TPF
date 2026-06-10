@@ -98,9 +98,6 @@ def visualize_samples(model, dataset, device, use_sar=False, n_samples=4, T=1000
 
 if __name__ == "__main__":
     # python eval/visualize_dbcr.py --config configs/dbcr_no_sar.yaml
-
-
-
     parser = argparse.ArgumentParser(description="Visualizar predicciones DBCR")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
     parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia iterativa (default: 10)")

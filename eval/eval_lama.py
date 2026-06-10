@@ -195,7 +195,7 @@ def evaluate(model, loader, use_sar, device):
             total_ssim += ssim(output, clear_b)
             total_sam  += sam(output, clear_b)
             n_batches  += 1
-            break
+            # break
 
     print(f"\n{'='*40}")
     print(f"  MAE  : {total_mae  / n_batches:.6f}")
