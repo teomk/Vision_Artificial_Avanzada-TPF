@@ -7,3 +7,10 @@ big-lama/
 external/lama/
 __pycache__/
 .opencode
+lib/
+lib64/
+lib64
+bin/
+include/
+include
+pyvenv.cfg

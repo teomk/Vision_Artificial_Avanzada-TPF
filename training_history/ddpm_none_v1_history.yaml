@@ -1,5 +1,5 @@
 train_loss:
-- 1.2017816305160522
+- 1.1718418598175049
 config:
   num_epochs: 1
   lr: 0.0001
@@ -7,4 +7,4 @@ config:
   T: 1000
   beta_schedule: sigmoid
   sar_mode: None
-  num_parameters: 27101958
+  num_parameters: 26404998

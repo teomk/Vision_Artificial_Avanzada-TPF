@@ -132,7 +132,7 @@ if __name__ == "__main__":
     # Arquitectura
     image_channels     = 6
     base_channels      = 64
-    time_dim           = 256
+    time_dim           = 128
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
