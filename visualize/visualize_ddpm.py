@@ -86,7 +86,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Visualizar predicciones ConditionalDDPMUNet")
     parser.add_argument("--config",    type=str, required=True,  help="Ruta al config YAML")
-    parser.add_argument("--steps",     type=int, default=50,     help="Pasos de inferencia DDPM (default: 50)")
+    parser.add_argument("--steps",     type=int, default=10,     help="Pasos de inferencia DDPM (default: 50)")
     parser.add_argument("--n_samples", type=int, default=4,      help="Cantidad de muestras (default: 4)")
     parser.add_argument("--save_path", type=str, default=None,   help="Ruta para guardar la figura")
     parser.add_argument("--seed",      type=int, default=17,     help="Semilla (default: 17)")
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         image_channels=image_channels,
         condition_channels=condition_channels,
         base_channels=64,
-        time_dim=256,
+        time_dim=128,
     )
     model.load_state_dict(checkpoint)
     model = model.float().to(device)

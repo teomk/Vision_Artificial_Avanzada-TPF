@@ -43,6 +43,7 @@ def evaluate(model, loader, sar_mode, device, scheduler, steps=50):
             total_ssim += ssim(pred, s2_clean)
             total_sam  += sam(pred, s2_clean)
             n_batches  += 1
+            # break
 
     metrics = {
         "mae":  float(total_mae  / n_batches),
@@ -107,7 +108,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluar ConditionalDDPMUNet (None | Concat | ControlNet)")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
     parser.add_argument("--split",  type=str, default="test", choices=["train", "test"], help="Split a evaluar (default: test)")
-    parser.add_argument("--steps",  type=int, default=50, help="Pasos de inferencia DDPM (default: 50)")
+    parser.add_argument("--steps",  type=int, default=10, help="Pasos de inferencia DDPM (default: 50)")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
@@ -133,7 +134,7 @@ if __name__ == "__main__":
         image_channels=image_channels,
         condition_channels=condition_channels,
         base_channels=64,
-        time_dim=256,
+        time_dim=128,
     )
     model.load_state_dict(checkpoint)
     model = model.float().to(device)

@@ -87,7 +87,7 @@ def fit(model, train_loader, lr, device, sar_mode, noise_scheduler, num_epochs=5
                 "loss":     f"{loss:.6f}",
                 "avg_loss": f"{avg_loss:.6f}"
             })
-            break
+            # break
 
         avg_loss = epoch_loss / num_batches
         history["train_loss"].append(avg_loss)

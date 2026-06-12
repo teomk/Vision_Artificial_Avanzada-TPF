@@ -44,7 +44,9 @@ def alpha_bar_to_betas(alpha_bar, max_beta=0.999):
     betas[0] = 1.0 - alpha_bar[0]
     betas[1:] = 1.0 - (alpha_bar[1:] / alpha_bar[:-1])
 
-    betas = torch.clamp(betas, min=0.0, max=max_beta)
+    betas[0] = 1e-4
+
+    betas = torch.clamp(betas, min=1e-6, max=max_beta)
 
     return betas
 
