@@ -5,7 +5,7 @@ model: "ddpm"
 train:
   batch_size: 8
   num_workers: 2
-  num_epochs: 15
+  num_epochs: 30
   lr: 0.0001
   T: 1000
   load_filename: ~

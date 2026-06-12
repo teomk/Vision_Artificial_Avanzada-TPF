@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     scheduler = build_sigmoid_ddpm_scheduler(
         T=T,
-        sigmoid_k=sigmoid_k,
+        sigmoid_k=25.0,
         alpha_min=alpha_min
     )
 

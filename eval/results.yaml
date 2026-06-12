@@ -50,3 +50,13 @@ models:
         psnr: 16.1851
         ssim: 0.310852
         sam: 49.3959
+    ddpm_none_v2:
+      filename: ddpm_none_v2.pth
+      eval:
+        split: test
+        date: '2026-06-12'
+        steps: 10
+        mae: 0.104575
+        psnr: 18.4637
+        ssim: 0.179832
+        sam: 48.5095
