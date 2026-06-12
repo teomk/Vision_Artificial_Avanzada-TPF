@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 # -------------------------
 # Time Embedding
 # -------------------------
@@ -24,7 +23,6 @@ class SinusoidalTimeEmbedding(nn.Module):
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
 
         return emb
-
 
 class TimeMLP(nn.Module):
     def __init__(self, time_dim):
@@ -254,11 +252,86 @@ class ConditionEncoderNAF(nn.Module):
         x = self.block2(x, t_emb)
         return x
 
-
-# -------------------------
-# Modelo 1: No SAR, No Mask
-# Diffusion Bridge + NAFBlocks
-# -------------------------
+class DBCRControlNet(nn.Module):
+    """
+    ControlNet para DBCRSimple usando NAFBlocks.
+ 
+    Espejo del encoder del U-Net base. Procesa SAR (S1, 2ch) y produce
+    residuals que se suman a los skips y al bottleneck del decoder.
+ 
+    Los zero_conv están inicializados en cero → al inicio del entrenamiento
+    los residuals son exactamente 0 y el U-Net base se comporta igual que
+    en la etapa sin SAR. El ControlNet aprende a partir de ese punto.
+ 
+    Uso típico (two-stage training):
+        # Etapa 1: entrenar DBCRSimple sin SAR
+        model = DBCRSimple(condition_channels=6)
+        ...
+ 
+        # Etapa 2: agregar ControlNet, congelar U-Net
+        controlnet = DBCRControlNet(base_channels=64, time_dim=128)
+        model = DBCRSimple(condition_channels=6, controlnet=controlnet)
+        model.load_state_dict(pesos_etapa1, strict=False)
+        model.freeze_unet()
+        ...
+    """
+ 
+    def __init__(self, sar_channels=2, base_channels=64, time_dim=256):
+        super().__init__()
+ 
+        # Proyecta SAR al espacio de features del U-Net
+        self.sar_encoder = nn.Sequential(
+            nn.Conv2d(sar_channels, base_channels, kernel_size=3, padding=1),
+            LayerNorm2d(base_channels),
+            nn.Conv2d(base_channels, base_channels, kernel_size=3, padding=1),
+        )
+ 
+        # Espejo del encoder de DBCRSimple
+        self.down1 = DownBlockNAF(base_channels,     base_channels * 2, time_dim)
+        self.down2 = DownBlockNAF(base_channels * 2, base_channels * 4, time_dim)
+        self.down3 = DownBlockNAF(base_channels * 4, base_channels * 8, time_dim)
+ 
+        self.mid = TimeNAFBlock(base_channels * 8, time_dim)
+ 
+        # Zero convs: inicializadas en cero para no perturbar el U-Net al arrancar
+        self.zero_conv_skip1 = nn.Conv2d(base_channels * 2, base_channels * 2, kernel_size=1)
+        self.zero_conv_skip2 = nn.Conv2d(base_channels * 4, base_channels * 4, kernel_size=1)
+        self.zero_conv_skip3 = nn.Conv2d(base_channels * 8, base_channels * 8, kernel_size=1)
+        self.zero_conv_mid   = nn.Conv2d(base_channels * 8, base_channels * 8, kernel_size=1)
+ 
+        self._init_zero_convs()
+ 
+    def _init_zero_convs(self):
+        for layer in [
+            self.zero_conv_skip1,
+            self.zero_conv_skip2,
+            self.zero_conv_skip3,
+            self.zero_conv_mid,
+        ]:
+            nn.init.zeros_(layer.weight)
+            nn.init.zeros_(layer.bias)
+ 
+    def forward(self, sar, t_emb):
+        """
+        sar:   [B, sar_channels, H, W]
+        t_emb: [B, time_dim]  — compartido con el U-Net base
+ 
+        Retorna dict con residuals para cada escala.
+        """
+        x = self.sar_encoder(sar)
+ 
+        x, skip1 = self.down1(x, t_emb)
+        x, skip2 = self.down2(x, t_emb)
+        x, skip3 = self.down3(x, t_emb)
+ 
+        x = self.mid(x, t_emb)
+ 
+        return {
+            "skip1": self.zero_conv_skip1(skip1),
+            "skip2": self.zero_conv_skip2(skip2),
+            "skip3": self.zero_conv_skip3(skip3),
+            "mid":   self.zero_conv_mid(x),
+        }
 
 class DBCRSimple(nn.Module):
     """
@@ -276,12 +349,17 @@ class DBCRSimple(nn.Module):
         image_channels=6,
         condition_channels=6,
         base_channels=64,
-        time_dim=256
+        time_dim=256,
+        control_net = None
     ):
         super().__init__()
 
         self.time_mlp = TimeMLP(time_dim)
+        if control_net is not None:
+            self.control_net = DBCRControlNet(base_channels=base_channels, time_dim=time_dim)
 
+        else:
+            self.control_net = None
         self.condition_encoder = ConditionEncoderNAF(
             condition_channels=condition_channels,
             base_channels=base_channels,
@@ -308,7 +386,21 @@ class DBCRSimple(nn.Module):
 
         self.out = nn.Conv2d(base_channels, image_channels, kernel_size=3, padding=1)
 
-    def forward(self, x_t, t, s2_cloudy):
+    def freeze_unet(self):
+        """
+        Congela todos los parámetros del U-Net base.
+        Llamar antes de entrenar la etapa 2 (ControlNet).
+        El ControlNet en sí NO se congela porque es un módulo separado.
+        """
+        # Freeze all parameters except those belonging to the ControlNet
+        for name, param in self.named_parameters():
+            if name.startswith("control_net."):
+                # keep ControlNet parameters trainable
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+
+    def forward(self, x_t, t, s2_cloudy, sar=None):
         """
         x_t:        estado intermedio del bridge. Shape [B, 6, H, W]
         t:          timestep. Shape [B]
@@ -331,6 +423,13 @@ class DBCRSimple(nn.Module):
 
         x = self.mid1(x, t_emb)
         x = self.mid2(x, t_emb)
+
+        if self.control_net is not None and sar is not None:
+            residuals = self.control_net(sar, t_emb)
+            skip1 = skip1 + residuals["skip1"]
+            skip2 = skip2 + residuals["skip2"]
+            skip3 = skip3 + residuals["skip3"]
+            x     = x     + residuals["mid"]
 
         x = self.up3(x, skip3, t_emb)
         x = self.up2(x, skip2, t_emb)

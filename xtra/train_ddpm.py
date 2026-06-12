@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from diffusers import DDPMScheduler
 
 from xtra.datasets_raro import SatellitePatchDataset
-from models.model_ddpm import ConditionalDDPMUNet, ControlNet
+from models.ddpm import ConditionalDDPMUNet, ControlNet
 
 
 def get_scheduler(num_train_timesteps: int = 1000):

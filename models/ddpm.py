@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 # -------------------------
 # Time Embedding
 # -------------------------
@@ -22,7 +21,6 @@ class SinusoidalTimeEmbedding(nn.Module):
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
         return emb
 
-
 class TimeMLP(nn.Module):
     def __init__(self, time_dim):
         super().__init__()
@@ -35,7 +33,6 @@ class TimeMLP(nn.Module):
 
     def forward(self, t):
         return self.net(t)
-
 
 # -------------------------
 # Blocks
@@ -72,7 +69,6 @@ class ResBlock(nn.Module):
 
         return h + self.skip(x)
 
-
 class DownBlock(nn.Module):
     def __init__(self, in_channels, out_channels, time_dim):
         super().__init__()
@@ -84,7 +80,6 @@ class DownBlock(nn.Module):
         skip = x
         x = self.down(x)
         return x, skip
-
 
 class UpBlock(nn.Module):
     def __init__(self, in_channels, skip_channels, out_channels, time_dim):
@@ -98,14 +93,13 @@ class UpBlock(nn.Module):
         x = self.res(x, t_emb)
         return x
 
-
 # -------------------------
 # Condition Encoder
 # -------------------------
 
 class ConditionEncoder(nn.Module):
     """
-    Recibe S2_cloudy + cloud_mask (4 canales por defecto).
+    Recibe S2_cloudy.
     Produce features del mismo tamaño espacial que la entrada,
     con base_channels canales.
     """
@@ -123,7 +117,6 @@ class ConditionEncoder(nn.Module):
 
     def forward(self, condition):
         return self.net(condition)
-
 
 # -------------------------
 # ControlNet
@@ -181,8 +174,7 @@ class ControlNet(nn.Module):
         se comporta idéntico a como quedó en la etapa 1.
         El ControlNet aprende a partir de ese punto sin "resetear" lo aprendido.
         """
-        for layer in [self.zero_conv_skip1, self.zero_conv_skip2,
-                      self.zero_conv_skip3, self.zero_conv_mid]:
+        for layer in [self.zero_conv_skip1, self.zero_conv_skip2, self.zero_conv_skip3, self.zero_conv_mid]:
             nn.init.zeros_(layer.weight)
             nn.init.zeros_(layer.bias)
 
@@ -201,13 +193,10 @@ class ControlNet(nn.Module):
 
         x = self.mid(x, t_emb)
 
-        return {
-            "skip1": self.zero_conv_skip1(skip1),
-            "skip2": self.zero_conv_skip2(skip2),
-            "skip3": self.zero_conv_skip3(skip3),
-            "mid":   self.zero_conv_mid(x),
-        }
-
+        return {"skip1": self.zero_conv_skip1(skip1),
+                "skip2": self.zero_conv_skip2(skip2),
+                "skip3": self.zero_conv_skip3(skip3),
+                "mid":   self.zero_conv_mid(x),}
 
 # -------------------------
 # Conditional DDPM U-Net
@@ -219,7 +208,7 @@ class ConditionalDDPMUNet(nn.Module):
 
     Etapa 1 (sin SAR):
         model = ConditionalDDPMUNet()
-        noise_pred = model(x_t, t, s2_cloudy, cloud_mask)
+        noise_pred = model(x_t, t, s2_cloudy)
 
     Etapa 2 (con SAR, ControlNet):
         controlnet = ControlNet()
@@ -228,33 +217,18 @@ class ConditionalDDPMUNet(nn.Module):
         # Congelar U-Net, solo entrenar ControlNet
         model.freeze_unet()
 
-        noise_pred = model(x_t, t, s2_cloudy, cloud_mask, sar=sar_image)
+        noise_pred = model(x_t, t, s2_cloudy, sar=sar_image)
     """
-    def __init__(
-        self,
-        image_channels=3,
-        condition_channels=4,   # 3 bandas S2_cloudy + 1 máscara
-        base_channels=64,
-        time_dim=256,
-        controlnet=None         # None en etapa 1, instancia de ControlNet en etapa 2
-    ):
+    def __init__(self, image_channels=6, condition_channels=6, base_channels=64, time_dim=256, controlnet=None):
         super().__init__()
 
         self.controlnet = controlnet
 
         self.time_mlp = TimeMLP(time_dim)
 
-        self.condition_encoder = ConditionEncoder(
-            condition_channels=condition_channels,
-            base_channels=base_channels
-        )
+        self.condition_encoder = ConditionEncoder(condition_channels=condition_channels, base_channels=base_channels)
 
-        self.init_conv = nn.Conv2d(
-            image_channels + base_channels,
-            base_channels,
-            kernel_size=3,
-            padding=1
-        )
+        self.init_conv = nn.Conv2d(image_channels + base_channels, base_channels, kernel_size=3, padding=1)
 
         self.down1 = DownBlock(base_channels,     base_channels * 2, time_dim)
         self.down2 = DownBlock(base_channels * 2, base_channels * 4, time_dim)
@@ -267,11 +241,10 @@ class ConditionalDDPMUNet(nn.Module):
         self.up2 = UpBlock(base_channels * 4, base_channels * 4, base_channels * 2, time_dim)
         self.up1 = UpBlock(base_channels * 2, base_channels * 2, base_channels,     time_dim)
 
-        self.out = nn.Sequential(
-            nn.GroupNorm(8, base_channels),
-            nn.SiLU(),
-            nn.Conv2d(base_channels, image_channels, 3, padding=1)
-        )
+        self.out = nn.Sequential(nn.GroupNorm(8, base_channels),
+                                 nn.SiLU(),
+                                 nn.Conv2d(base_channels, image_channels, 3, padding=1)
+                                )
 
     def freeze_unet(self):
         """
@@ -295,12 +268,11 @@ class ConditionalDDPMUNet(nn.Module):
         for param in self.parameters():
             param.requires_grad = True
 
-    def forward(self, x_t, t, s2_cloudy, cloud_mask, sar=None):
+    def forward(self, x_t, t, s2_cloudy, sar=None):
         """
         x_t:        imagen limpia con ruido.       Shape: [B, C, H, W]
         t:          timestep de difusión.          Shape: [B]
         s2_cloudy:  imagen S2 nubosa.              Shape: [B, 3, H, W]
-        cloud_mask: máscara de nubes.              Shape: [B, 1, H, W]
         sar:        imagen SAR (opcional).         Shape: [B, 2, H, W]
                     Si es None, se comporta como etapa 1.
         """
@@ -308,9 +280,7 @@ class ConditionalDDPMUNet(nn.Module):
         # --- Time embedding (compartido con ControlNet) ---
         t_emb = self.time_mlp(t)
 
-        # --- Condición base: S2_cloudy + máscara ---
-        condition = torch.cat([s2_cloudy, cloud_mask], dim=1)
-        condition_features = self.condition_encoder(condition)
+        condition_features = self.condition_encoder(s2_cloudy)
 
         # --- Entrada al U-Net ---
         x = torch.cat([x_t, condition_features], dim=1)
@@ -344,42 +314,3 @@ class ConditionalDDPMUNet(nn.Module):
         noise_pred = self.out(x)
 
         return noise_pred
-
-
-# # -------------------------
-# # Ejemplo de uso
-# # -------------------------
-
-# if __name__ == "__main__":
-#     B, H, W = 2, 64, 64
-
-#     # ---------- Etapa 1: sin SAR ----------
-#     model_etapa1 = ConditionalDDPMUNet()
-
-#     x_t       = torch.randn(B, 3, H, W)
-#     t         = torch.randint(0, 1000, (B,))
-#     s2_cloudy = torch.randn(B, 3, H, W)
-#     mask      = torch.randn(B, 1, H, W)
-
-#     out1 = model_etapa1(x_t, t, s2_cloudy, mask)
-#     print("Etapa 1 output:", out1.shape)  # [2, 3, 64, 64]
-
-#     # ---------- Etapa 2: con SAR + ControlNet ----------
-#     controlnet    = ControlNet(sar_channels=2)
-#     model_etapa2  = ConditionalDDPMUNet(controlnet=controlnet)
-
-#     # Cargar pesos de etapa 1
-#     # model_etapa2.load_state_dict(torch.load("etapa1.pth"), strict=False)
-
-#     # Congelar U-Net, solo entrenar ControlNet
-#     model_etapa2.freeze_unet()
-
-#     sar = torch.randn(B, 2, H, W)
-#     out2 = model_etapa2(x_t, t, s2_cloudy, mask, sar=sar)
-#     print("Etapa 2 output:", out2.shape)  # [2, 3, 64, 64]
-
-#     # Verificar que el U-Net está congelado y el ControlNet no
-#     unet_params     = sum(p.numel() for p in model_etapa2.parameters() if p.requires_grad)
-#     control_params  = sum(p.numel() for p in controlnet.parameters()   if p.requires_grad)
-#     print(f"Params entrenables U-Net:    {unet_params}")      # debe ser 0
-#     print(f"Params entrenables ControlNet: {control_params}") # debe ser > 0

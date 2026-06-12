@@ -4,6 +4,7 @@ import sys
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
+from diffusers import DDPMScheduler
 import yaml
 import argparse
 from datetime import date
@@ -18,15 +19,17 @@ sys.path.append(str(MODELS_DIR))
 sys.path.append(str(UTILS_DIR))
 
 from dataset import SEN12MSCRDataset
-from dbcr_simple import DBCRSimple
+from ddpm import ConditionalDDPMUNet
 from hf_utils import download_model
+from ddpm_utils import inference, build_sigmoid_ddpm_scheduler
 from dataset_utils import unpack_batch
-from dbcr_simple_utils import inference
 from metrics import mae, psnr, ssim, sam
+
+
 
 # ── Evaluación ─────────────────────────────────────────────────────────
 
-def evaluate(model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
+def evaluate(model, loader, sar_mode, device, scheduler, steps=50):
     model.eval()
     total_mae = total_psnr = total_ssim = total_sam = 0.0
     n_batches = 0
@@ -34,14 +37,19 @@ def evaluate(model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
     with torch.no_grad():
         for batch in tqdm(loader, desc="Evaluando", unit="batch"):
             s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
-            pred = inference(model, s2_cloudy, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k).clamp(0, 1)
+            pred = inference(model, condition, device, scheduler, steps=steps, sar=sar).clamp(0, 1)
             total_mae  += mae(pred, s2_clean)
             total_psnr += psnr(pred, s2_clean)
             total_ssim += ssim(pred, s2_clean)
             total_sam  += sam(pred, s2_clean)
             n_batches  += 1
 
-    metrics = {"mae": float(total_mae/n_batches), "psnr": float(total_psnr/n_batches), "ssim": float(total_ssim/n_batches), "sam": float(total_sam/n_batches)}
+    metrics = {
+        "mae":  float(total_mae  / n_batches),
+        "psnr": float(total_psnr / n_batches),
+        "ssim": float(total_ssim / n_batches),
+        "sam":  float(total_sam  / n_batches),
+    }
 
     print(f"\n{'='*40}")
     print(f"  MAE  : {metrics['mae']:.6f}")
@@ -62,10 +70,10 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
     if "models" not in data:
         data["models"] = {}
 
-    mkey = f"dbcr_{sar_mode.lower()}"   # "dbcr_none" | "dbcr_concat" | "dbcr_controlnet"
+    mkey = f"ddpm_{sar_mode.lower()}"   # "ddpm_none" | "ddpm_concat" | "ddpm_controlnet"
     if mkey not in data["models"]:
         data["models"][mkey] = {}
- 
+
     target_vkey = None
     for vkey, entry in data["models"][mkey].items():
         if entry.get("filename") == filename:
@@ -74,7 +82,7 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
     if target_vkey is None:
         target_vkey = filename.replace(".pth", "")
         data["models"][mkey][target_vkey] = {"filename": filename}
- 
+
     data["models"][mkey][target_vkey]["eval"] = {
         "split": split,
         "date":  str(date.today()),
@@ -84,7 +92,7 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
         "ssim":  round(metrics["ssim"], 6),
         "sam":   round(metrics["sam"],  4),
     }
- 
+
     yaml_path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False))
     print(f"Métricas guardadas en {yaml_path} (models.{mkey}.{target_vkey}.eval)")
 
@@ -92,22 +100,25 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
 # ── Main ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    # python eval/eval_dbcr_simple.py --config configs/dbcr_no_sar.yaml
-    # python eval/eval_dbcr_simple.py --config configs/dbcr_sar.yaml --split test --steps 10
-    parser = argparse.ArgumentParser(description="Evaluar DBCR (SAR o No-SAR)")
+    # python eval/eval_ddpm.py --config configs/ddpm_none.yaml
+    # python eval/eval_ddpm.py --config configs/ddpm_concat.yaml
+    # python eval/eval_ddpm.py --config configs/ddpm_controlnet.yaml
+
+    parser = argparse.ArgumentParser(description="Evaluar ConditionalDDPMUNet (None | Concat | ControlNet)")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
-    parser.add_argument("--split", type=str, default="test", choices=["train", "test"], help="Split a evaluar (default: test)")
-    parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia iterativa (default: 10)")
+    parser.add_argument("--split",  type=str, default="test", choices=["train", "test"], help="Split a evaluar (default: test)")
+    parser.add_argument("--steps",  type=int, default=50, help="Pasos de inferencia DDPM (default: 50)")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode = cfg["sar_mode"]  # "None" | "Concat" | "ControlNet"
+    sar_mode      = cfg["sar_mode"]
     repo_id       = cfg["huggingface"]["repo_id"]
     save_filename = cfg["huggingface"]["save_filename"]
-    T             = cfg["train"]["T"]
-    sigmoid_k = cfg["train"].get("sigmoid_k", 10.0)
+    T = int(cfg["train"]["T"])
+    sigmoid_k = float(cfg["train"].get("sigmoid_k", 25.0))
+    alpha_min = float(cfg["train"].get("alpha_min", 1e-4))
     batch_size    = cfg["train"]["batch_size"]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -118,13 +129,24 @@ if __name__ == "__main__":
     image_channels     = 6
     condition_channels = 8 if sar_mode == "Concat" else 6
 
-    model = DBCRSimple(image_channels=image_channels, condition_channels=condition_channels, base_channels=64, time_dim=128, control_net=(sar_mode == "ControlNet"))
+    model = ConditionalDDPMUNet(
+        image_channels=image_channels,
+        condition_channels=condition_channels,
+        base_channels=64,
+        time_dim=256,
+    )
     model.load_state_dict(checkpoint)
     model = model.float().to(device)
+
+    scheduler = build_sigmoid_ddpm_scheduler(
+        T=T,
+        sigmoid_k=sigmoid_k,
+        alpha_min=alpha_min
+    )
 
     ds = SEN12MSCRDataset(split=args.split, include_s1=(sar_mode != "None"), include_mask=False)
     loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=cfg["train"]["num_workers"])
 
-    metrics = evaluate(model=model, loader=loader, sar_mode=sar_mode, device=device, T=T, steps=args.steps, sigmoid_k=sigmoid_k)
+    metrics = evaluate(model=model, loader=loader, sar_mode=sar_mode, device=device, scheduler=scheduler, steps=args.steps)
 
     register_eval(filename=save_filename, metrics=metrics, split=args.split, sar_mode=sar_mode, steps=args.steps, yaml_path="eval/results.yaml")

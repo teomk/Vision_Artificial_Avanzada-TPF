@@ -1,0 +1,19 @@
+sar_mode: "None"
+
+model: "ddpm"
+
+train:
+  batch_size: 8
+  num_workers: 2
+  num_epochs: 1
+  lr: 0.0001
+  T: 1000
+  load_filename: ~
+  alpha_min: 0.0001
+  sigmoid_k: 25.0
+
+huggingface:
+  repo_id: "LucioLuque/lama"
+  save_filename: "ddpm_none_v1.pth"
+  version: 1
+  notes: "ConditionalDDPMUNet sin SAR. condition=S2 (6ch). sigmoid beta schedule."

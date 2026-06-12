@@ -18,44 +18,18 @@ sys.path.append(str(DATA_DIR))
 sys.path.append(str(MODELS_DIR))
 sys.path.append(str(UTILS_DIR))
 
-
 from dbcr_simple import DBCRSimple
-
-from hf_utils import (
-    download_model,
-    upload_model,
-    resolve_save_version,
-    register_version,
-)
+from hf_utils import download_model, upload_model, resolve_save_version, register_version
+from dbcr_simple_utils import make_bridge_sample
+from dataset_utils import unpack_batch
 
 from dataset import SEN12MSCRDataset
-# from hf_utils import (
-#     download_model,
-#     upload_model,
-#     resolve_save_version,
-#     register_version,
-# )
 
-def sigmoid_scheduler(T, sigmoid_k, t, device):
-    tau = torch.clamp(t.float() / T, 0.0, 1.0)
-    s = torch.sigmoid((tau - 0.5) * sigmoid_k)
-    s_min = torch.sigmoid(torch.tensor(-0.5 * sigmoid_k, device=device))
-    s_max = torch.sigmoid(torch.tensor(0.5 * sigmoid_k, device=device))
-    alpha = torch.clamp((s - s_min) / (s_max - s_min), 0.0, 1.0)
-    return alpha[:, None, None, None]
-
-def make_bridge_sample(s2_clean, s2_cloudy, t, T, sigmoid_k, device):
-    alpha_t = sigmoid_scheduler(T, sigmoid_k, t, device)
-    return (1.0 - alpha_t) * s2_clean + alpha_t * s2_cloudy
-
-def run(model, batch, optimizer, device, T=1000, sigmoid_k=10.0):
+def run(model, batch, optimizer, device, use_sar, T=1000, sigmoid_k=10.0):
 
     model.train()
 
-    s2_cloudy, s2_clean = batch
-
-    s2_cloudy = s2_cloudy.to(device)
-    s2_clean  = s2_clean.to(device)
+    s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, use_sar, device)
 
     B = s2_clean.shape[0]
 
@@ -63,7 +37,7 @@ def run(model, batch, optimizer, device, T=1000, sigmoid_k=10.0):
 
     x_t = make_bridge_sample(s2_clean=s2_clean, s2_cloudy=s2_cloudy, t=t, T=T, sigmoid_k=sigmoid_k, device=device)
 
-    pred_clean = model(x_t=x_t, t=t, s2_cloudy=s2_cloudy)
+    pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
 
     loss = F.l1_loss(pred_clean, s2_clean)
 
@@ -74,7 +48,7 @@ def run(model, batch, optimizer, device, T=1000, sigmoid_k=10.0):
 
     return loss.item()
 
-def fit(model, train_loader, lr , device, num_epochs=50, T=1000, sigmoid_k=10.0):
+def fit(model, train_loader, lr , device, sar_mode, num_epochs=50, T=1000, sigmoid_k=10.0):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=2)
@@ -86,7 +60,7 @@ def fit(model, train_loader, lr , device, num_epochs=50, T=1000, sigmoid_k=10.0)
         progress_bar = tqdm(train_loader, desc=f"Época {epoch+1}/{num_epochs}", unit="batch")
 
         for batch in progress_bar:
-            loss = run(model=model, batch=batch, optimizer=optimizer, device=device, T=T, sigmoid_k=sigmoid_k)
+            loss = run(model=model, batch=batch, optimizer=optimizer, device=device, sar_mode=sar_mode, T=T, sigmoid_k=sigmoid_k)
 
             epoch_loss += loss
             num_batches += 1
@@ -98,103 +72,11 @@ def fit(model, train_loader, lr , device, num_epochs=50, T=1000, sigmoid_k=10.0)
         scheduler.step(avg_loss)
 
     return history
-
-
-# if __name__ == "__main__":
-    
-
-#     # parser = argparse.ArgumentParser()
-#     # parser.add_argument("--config", type=str, required=True)
-#     # args = parser.parse_args()
-
-#     # # Cargar configuración
-#     # import yaml
-#     # with open(args.config, "r") as f:
-#     #     config = yaml.safe_load(f)
-
-#     # # Configuración de entrenamiento
-#     # batch_size = config["train"]["batch_size"]
-#     # num_workers = config["train"]["num_workers"]
-#     # lr = config["train"]["lr"]
-#     # num_epochs = config["train"]["num_epochs"]
-
-#     batch_size = 8
-#     num_workers = 2
-#     lr = 1e-4
-#     num_epochs = 15
-
-#     # Configuración del modelo
-#     image_channels = 6
-#     condition_channels = 6
-#     base_channels = 64
-#     time_dim = 128
-
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-#     # Dataset y DataLoader
-#     ds_train = SEN12MSCRDataset(split="train", include_s1=False, include_mask = False)
-#     loader_train  = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-
-#     # Modelo
-#     model = DBCRNoSARNAF(image_channels=image_channels, condition_channels=condition_channels,
-#         base_channels=base_channels, time_dim=time_dim).to(device)
-
-
-
-#     #load frtom hghuggingface v1
-#     # repo_id = "LucioLuque/lama"
-#     # filename = "dbcr_no_sar_naf_v1.pth"
-#     # checkpoint = download_model(repo_id=repo_id, filename=filename, map_location=device)
-#     # model.load_state_dict(checkpoint) 
-    
-#     #parameters to train:
-
-#     parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-#     print(f"Total trainable parameters: {parameters}")
-    
-#     history = fit(model=model, train_loader=loader_train, lr=lr, device=device, num_epochs=num_epochs)
-
-#     # #save .pth in ../saved_models
-#     # save_path = ROOT / "saved_models" / "dbcr_no_sar_naf_v1.pth"
-#     # torch.save(model.state_dict(), save_path)
-#     # print(f"Modelo guardado en: {save_path}")
-
-#     repo_id = "LucioLuque/lama"
-#     save_filename = "dbcr_no_sar_naf_v2.pth"
-
-
-#     upload_model(
-#         model_state_dict=model.state_dict(),
-#         repo_id=repo_id,
-#         filename=save_filename,
-#     )
-    
-#     version = 2
-#     base_filename = save_filename
-#     use_sar = False
-#     phase1_info = {"num_epochs": num_epochs, "lr": lr, "T": 1000, "sigmoid_k": 10.0, "batch_size": batch_size, "num_weights": parameters}
-#     phase2_info = {"num_epochs": 0, "lr": 0, "T": 0, "sigmoid_k": 0, "batch_size": 0, "num_weights": 0}
-
-#     # ── Registrar versión en versions.yaml ────────────────────────────────────
-#     register_version(
-#         repo_id=repo_id,
-#         version=version,
-#         filename=save_filename,
-#         base_model=base_filename,
-#         use_sar=use_sar,
-#         phase1_info=phase1_info,
-#         phase2_info=phase2_info,
-#         notes="Nada",
-#     )
-
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────────────────────────────────────
  
 if __name__ == "__main__":
-    # python train/train_dbcr_simple.py --config configs/dbcr_no_sar.yaml
+    # python train/train_dbcr_simple.py --config configs/dbcr_none.yaml
+    # python train/train_dbcr_simple.py --config configs/dbcr_concat.yaml
+    # python train/train_dbcr_simple.py --config configs/dbcr_controlnet.yaml
  
     parser = argparse.ArgumentParser(description="Entrenar DBCR (SAR o No-SAR)")
     parser.add_argument(
@@ -206,7 +88,7 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
  
-    use_sar     = cfg["sar"]
+    sar_mode     = cfg["sar_mode"]
     cfg_train   = cfg["train"]
     cfg_hf      = cfg["huggingface"]
  
@@ -216,6 +98,9 @@ if __name__ == "__main__":
     lr          = cfg_train["lr"]
     T           = cfg_train["T"]
     sigmoid_k   = cfg_train["sigmoid_k"]
+    load_filename = cfg_train["load_filename"]
+    load_filename = None if load_filename == "None" else load_filename
+
  
     repo_id       = cfg_hf["repo_id"]
     save_filename = cfg_hf["save_filename"]
@@ -224,92 +109,99 @@ if __name__ == "__main__":
  
     # Arquitectura fija
     image_channels     = 6
-    condition_channels = 6
-    sar_channels       = 2
     base_channels      = 64
     time_dim           = 128
+
+    condition_channels = 8 if sar_mode == "Concat" else 6
  
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device} | SAR: {use_sar}")
+    print(f"Device: {device} | SAR Mode: {sar_mode} | Condition Channels: {condition_channels} | Epochs: {num_epochs}")
  
     # Dataset
-    ds_train = SEN12MSCRDataset(
-        split="train",
-        include_s1=use_sar,
-        include_mask=False
-    )
-    loader_train = DataLoader(
-        ds_train, batch_size=batch_size,
-        shuffle=True, num_workers=num_workers
-    )
- 
-  
+    ds_train = SEN12MSCRDataset(split="train", include_s1= sar_mode != "None", include_mask=False)
+
+    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     
     model = DBCRSimple(
         image_channels=image_channels,
         condition_channels=condition_channels,
         base_channels=base_channels,
         time_dim=time_dim,
+        control_net=(sar_mode == "ControlNet")
     ).to(device)
+
+    if load_filename is not None:
+        checkpoint = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
+        model.load_state_dict(checkpoint, strict=False)
+        print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
+
+    if sar_mode == "ControlNet":
+        model.freeze_unet()
+        print("UNet congelada. Solo se entrenará el ControlNet.")
+        #chequear que efectivamente solo el control net tiene parámetros entrenables
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        controlnet_params = sum(p.numel() for p in model.control_net.parameters() if p.requires_grad)
+        assert trainable_params == controlnet_params, f"Error: Se esperaban {controlnet_params} parámetros entrenables, pero se encontraron {trainable_params}."
+        print(f"Parámetros entrenables (ControlNet): {trainable_params:,}")
  
-    parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Parámetros entrenables: {parameters:,}")
+    # parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # print(f"Parámetros entrenables: {parameters:,}")
  
-    # Entrenar
-    history = fit(
-        model=model, train_loader=loader_train,
-        lr=lr, device=device,
-        num_epochs=num_epochs, T=T, sigmoid_k=sigmoid_k
-    )
+    # # Entrenar
+    # history = fit(
+    #     model=model, train_loader=loader_train,
+    #     lr=lr, device=device, sar_mode=sar_mode,
+    #     num_epochs=num_epochs, T=T, sigmoid_k=sigmoid_k
+    # )
  
-    # Subir a HuggingFace
-    upload_model(
-        model_state_dict=model.state_dict(),
-        repo_id=repo_id,
-        filename=save_filename,
-    )
+    # # Subir a HuggingFace
+    # upload_model(
+    #     model_state_dict=model.state_dict(),
+    #     repo_id=repo_id,
+    #     filename=save_filename,
+    # )
  
-    # Registrar versión
-    register_version(
-        repo_id=repo_id,
-        version=version,
-        filename=save_filename,
-        base_model=save_filename,
-        use_sar=use_sar,
-        phase1_info={
-            "num_epochs": num_epochs, "lr": lr,
-            "T": T, "sigmoid_k": sigmoid_k,
-            "batch_size": batch_size, "num_weights": parameters
-        },
-        phase2_info={
-            "num_epochs": 0, "lr": 0,
-            "T": 0, "sigmoid_k": 0,
-            "batch_size": 0, "num_weights": 0
-        },
-        notes=notes,
-    )
+    # # Registrar versión
+    # register_version(
+    #     repo_id=repo_id,
+    #     version=version,
+    #     filename=save_filename,
+    #     base_model=save_filename,
+    #     use_sar=sar_mode,
+    #     phase1_info={
+    #         "num_epochs": num_epochs, "lr": lr,
+    #         "T": T, "sigmoid_k": sigmoid_k,
+    #         "batch_size": batch_size, "num_weights": parameters, "sar_mode": sar_mode
+    #     },
+    #     phase2_info={
+    #         "num_epochs": 0, "lr": 0,
+    #         "T": 0, "sigmoid_k": 0,
+    #         "batch_size": 0, "num_weights": 0
+    #     },
+    #     notes=notes,
+    # )
 
-    history_data = {
-    "train_loss": history["train_loss"],
-    "config": {
-        "num_epochs": num_epochs,
-        "lr": lr,
-        "batch_size": batch_size,
-        "T": T,
-        "sigmoid_k": sigmoid_k,
-        "use_sar": use_sar,
-        "num_parameters": parameters,
-        }
-    }
+    # history_data = {
+    # "train_loss": history["train_loss"],
+    # "config": {
+    #     "num_epochs": num_epochs,
+    #     "lr": lr,
+    #     "batch_size": batch_size,
+    #     "T": T,
+    #     "sigmoid_k": sigmoid_k,
+    #     "use_sar": sar_mode,
+    #     "num_parameters": parameters,
+    #     }
+    # }
 
-    history_dir = ROOT / "training_history"
-    history_dir.mkdir(parents=True, exist_ok=True)
+    # history_dir = ROOT / "training_history"
+    # history_dir.mkdir(parents=True, exist_ok=True)
 
-    history_filename = save_filename.replace(".pth", "_history.yaml")
-    history_path = history_dir / history_filename
+    # history_filename = save_filename.replace(".pth", "_history.yaml")
+    # history_path = history_dir / history_filename
 
-    with open(history_path, "w") as f:
-        yaml.safe_dump(history_data, f, sort_keys=False)
+    # with open(history_path, "w") as f:
+    #     yaml.safe_dump(history_data, f, sort_keys=False)
 
-    print(f"History guardado en: {history_path}")
+    # print(f"History guardado en: {history_path}")
  

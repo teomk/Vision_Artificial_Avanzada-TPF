@@ -19,6 +19,7 @@ sys.path.append(str(ROOT / "utils"))
 from saicinpainting.training.modules.ffc import FFCResNetGenerator
 from dataset import SEN12MSCRDataset
 from hf_utils import download_model, resolve_load_version
+from visualize_utils import to_rgb, to_gray, to_sar, get_rgb_stats
 
 
 # ── Modelo ─────────────────────────────────────────────────────────────
@@ -34,35 +35,6 @@ def build_model(use_sar: bool) -> FFCResNetGenerator:
         downsample_conv_kwargs={"ratio_gin": 0,    "ratio_gout": 0},
         resnet_conv_kwargs    ={"ratio_gin": 0.75, "ratio_gout": 0.75, "enable_lfu": False},
     )
-
-
-# ── Helpers de visualización ───────────────────────────────────────────
-
-def to_rgb(tensor, bands=(2, 1, 0)):
-    """
-    Convierte un tensor [C, H, W] a imagen RGB [H, W, 3] para mostrar.
-    Por defecto usa bandas (B4, B3, B2) → índices (2, 1, 0) en nuestro orden
-    [B2, B3, B4, B8, B11, B12].
-    """
-    img = tensor[[bands[0], bands[1], bands[2]]].permute(1, 2, 0).numpy()
-    img = np.clip(img, 0, 1)
-    out = np.zeros_like(img)
-    for c in range(3):
-        p2, p98 = np.percentile(img[:, :, c], 2), np.percentile(img[:, :, c], 98)
-        out[:, :, c] = np.clip((img[:, :, c] - p2) / (p98 - p2 + 1e-8), 0, 1)
-    return out
-
-def to_gray(tensor):
-    """Tensor [1, H, W] o [H, W] → array [H, W] para imshow."""
-    if tensor.ndim == 3:
-        return tensor[0].numpy()
-    return tensor.numpy()
-
-def to_sar(tensor, band=0):
-    """Tensor SAR [2, H, W] → array [H, W] normalizado para visualizar."""
-    img = tensor[band].numpy()
-    p2, p98 = np.percentile(img, 2), np.percentile(img, 98)
-    return np.clip((img - p2) / (p98 - p2 + 1e-8), 0, 1)
 
 
 # ── Visualización ──────────────────────────────────────────────────────
@@ -103,16 +75,17 @@ def visualize_samples(model, dataset, use_sar, device, n_samples=4, save_path=No
                 ], dim=0).unsqueeze(0).float().to(device)
 
             output = model(x).squeeze(0).clamp(0, 1).cpu()
+            stats = get_rgb_stats(cloudy, output, clear)
 
             images = []
             cmaps  = []
 
-            images.append(to_rgb(cloudy));              cmaps.append(None)
+            images.append(to_rgb(cloudy, stats=stats));              cmaps.append(None)
             if use_sar:
                 images.append(to_sar(s1));              cmaps.append("gray")
             images.append(to_gray(mask));               cmaps.append("gray")
-            images.append(to_rgb(output));              cmaps.append(None)
-            images.append(to_rgb(clear, bands=(2,1,0))); cmaps.append(None)
+            images.append(to_rgb(output, stats=stats));              cmaps.append(None)
+            images.append(to_rgb(clear, stats=stats)); cmaps.append(None)
 
             for col, (img, cmap) in enumerate(zip(images, cmaps)):
                 ax = fig.add_subplot(gs[row, col])
@@ -135,9 +108,9 @@ def visualize_samples(model, dataset, use_sar, device, n_samples=4, save_path=No
 if __name__ == "__main__":
 
     # Ejemplos de uso:
-    #   python eval/visualize_lama.py --config configs/lama_no_sar.yaml
-    #   python eval/visualize_lama.py --config configs/lama_no_sar.yaml --version 2
-    #   python eval/visualize_lama.py --config configs/lama_sar.yaml --n_samples 6 --save
+    #   python visualize/visualize_lama.py --config configs/lama_no_sar.yaml
+    #   python visualize/visualize_lama.py --config configs/lama_no_sar.yaml --version 2
+    #   python visualize/visualize_lama.py --config configs/lama_sar.yaml --n_samples 6 --save
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config",    type=str, required=True)

@@ -1,0 +1,10 @@
+train_loss:
+- 1.2017816305160522
+config:
+  num_epochs: 1
+  lr: 0.0001
+  batch_size: 8
+  T: 1000
+  beta_schedule: sigmoid
+  sar_mode: None
+  num_parameters: 27101958

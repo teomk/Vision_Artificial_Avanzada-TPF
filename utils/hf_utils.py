@@ -237,13 +237,13 @@ def _upload_versions_yaml(repo_id: str, data: dict) -> None:
         Path(tmp_path).unlink(missing_ok=True)
 
 
-def _model_key(model_name, use_sar: bool) -> str:
+def _model_key(model_name, sar_mode: str) -> str:
     """Devuelve la clave de primer nivel para el modelo en versions.yaml."""
-    if use_sar:
-        model_name += "_sar"
-    else:
-        model_name += "_no_sar"
-    return model_name
+    # if use_sar:
+    #     model_name += "_sar"
+    # else:
+    #     model_name += "_no_sar"
+    return model_name + "_" + sar_mode.lower()
 
 
 def register_version(
@@ -252,7 +252,7 @@ def register_version(
     filename: str,
     *,
     base_model: str,
-    use_sar: bool,
+    sar_mode: str,
     phase1_info: dict,
     phase2_info: dict,
     notes: str = "",
@@ -289,7 +289,7 @@ def register_version(
         version:      número entero de versión
         filename:     nombre del archivo .pth subido
         base_model:   nombre del archivo .pth base usado como punto de partida
-        use_sar:      si se usaron datos SAR
+        sar_mode:     modo SAR utilizado ("None", "Concat", o "ControlNet")
         phase1_info:  dict con epochs, lr, trainable_params, trainable_layers
         phase2_info:  dict con epochs, lr, trainable_params, trainable_layers
         notes:        comentario libre del usuario
@@ -299,7 +299,7 @@ def register_version(
         data["models"] = {}
 
     model_name = base_model.rsplit("_")[0]  # e.g. "lama_no_sar_pretrained_v1.pth" → "lama"
-    mkey = _model_key(model_name, use_sar)
+    mkey = _model_key(model_name, sar_mode)
     if mkey not in data["models"]:
         data["models"][mkey] = {}
 
