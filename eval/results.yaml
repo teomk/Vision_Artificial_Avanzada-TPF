@@ -60,3 +60,14 @@ models:
         psnr: 18.4637
         ssim: 0.179832
         sam: 48.5095
+  dbcr_concat:
+    dbcr_concat_v1:
+      filename: dbcr_concat_v1.pth
+      eval:
+        split: test
+        date: '2026-06-13'
+        steps: 10
+        mae: 0.034376
+        psnr: 26.7608
+        ssim: 0.791971
+        sam: 10.7257

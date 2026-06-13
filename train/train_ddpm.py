@@ -41,10 +41,9 @@ def run(model, batch, optimizer, device, sar_mode, noise_scheduler):
     # Forward: agregar ruido según el scheduler
     x_t = noise_scheduler.add_noise(s2_clean, noise, t)
 
-    # El modelo predice el ruido
-    noise_pred = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
-
-    loss = F.mse_loss(noise_pred, noise)
+    with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type=="cuda"):
+        noise_pred = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
+        loss = F.mse_loss(noise_pred, noise)
 
     optimizer.zero_grad()
     loss.backward()

@@ -24,8 +24,9 @@ def inference(model, cloudy_b, condition, device, T=1000, steps=10, sar=None, si
         for t_val in timesteps:
             B = x_t.shape[0]
             t = t_val.repeat(B).to(device)
-            pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type=="cuda"):
+                pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
             prev_t = (t_val - (T // steps)).clamp(min=1)
             prev_t = prev_t.repeat(B).to(device)
-            x_t = make_bridge_sample(s2_clean=pred_clean, s2_cloudy=cloudy_b, t=prev_t, T=T, sigmoid_k=sigmoid_k, device=device).clamp(0, 1)
-    return pred_clean
+            x_t = make_bridge_sample(s2_clean=pred_clean.float(), s2_cloudy=cloudy_b, t=prev_t, T=T, sigmoid_k=sigmoid_k, device=device).clamp(0, 1)
+    return pred_clean.float()

@@ -5,11 +5,12 @@ model: "dbcr"
 train:
   batch_size: 8
   num_workers: 2
-  num_epochs: 1
+  num_epochs: 15
   lr: 0.0001
   T: 1000
   sigmoid_k: 10.0
-  load_filename: "None"
+  # load_filename: "None"
+  load_filename: "dbcr_no_sar_naf_v2.pth"
 
 huggingface:
   repo_id: "LucioLuque/lama"

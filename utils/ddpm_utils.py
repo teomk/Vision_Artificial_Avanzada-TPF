@@ -94,7 +94,7 @@ def inference(model, condition, device, scheduler, steps=50, sar=None):
     with torch.no_grad():
         for t_val in tqdm(scheduler.timesteps, desc="DDPM", unit="step", leave=False):
             t          = t_val.repeat(B).to(device)
-            noise_pred = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
-            x_t        = scheduler.step(noise_pred, t_val, x_t).prev_sample
-
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type=="cuda"):
+                noise_pred = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
+            x_t        = scheduler.step(noise_pred.float(), t_val, x_t).prev_sample
     return x_t.clamp(0, 1)

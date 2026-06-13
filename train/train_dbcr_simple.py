@@ -37,9 +37,13 @@ def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
 
     x_t = make_bridge_sample(s2_clean=s2_clean, s2_cloudy=s2_cloudy, t=t, T=T, sigmoid_k=sigmoid_k, device=device)
 
-    pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
-
-    loss = F.l1_loss(pred_clean, s2_clean)
+    if device.type == "cuda":
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type=="cuda"):
+            pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
+            loss = F.l1_loss(pred_clean, s2_clean)
+    else:
+        pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
+        loss = F.l1_loss(pred_clean, s2_clean)
 
     optimizer.zero_grad()
     loss.backward()
@@ -66,7 +70,7 @@ def fit(model, train_loader, lr , device, sar_mode, num_epochs=50, T=1000, sigmo
             num_batches += 1
             avg_loss = epoch_loss / num_batches
             progress_bar.set_postfix({"loss": f"{loss:.6f}", "avg_loss": f"{avg_loss:.6f}"})
-            break
+            # break
 
         avg_loss = epoch_loss / num_batches
         history["train_loss"].append(avg_loss)
@@ -101,7 +105,6 @@ if __name__ == "__main__":
     sigmoid_k   = cfg_train["sigmoid_k"]
     load_filename = cfg_train["load_filename"]
     load_filename = None if load_filename == "None" else load_filename
-
  
     repo_id       = cfg_hf["repo_id"]
     save_filename = cfg_hf["save_filename"]
@@ -121,8 +124,10 @@ if __name__ == "__main__":
     # Dataset
     ds_train = SEN12MSCRDataset(split="train", include_s1= sar_mode != "None", include_mask=False)
 
-    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=0)
+    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"))
     
+    print(device.type == "cuda")
+
     model = DBCRSimple(
         image_channels=image_channels,
         condition_channels=condition_channels,
@@ -147,6 +152,11 @@ if __name__ == "__main__":
             new_weight[:, 6:, :, :] = 0           # SAR arranca en cero
             checkpoint["condition_encoder.in_conv.weight"] = new_weight
 
+            # i want to print how many parameters im initializing with pretrained weights vs how many new parameters are being added
+            pretrained_params = old_weight.numel()
+            new_params = new_weight.numel() - pretrained_params
+            print(f"Inicializando {pretrained_params:,} parámetros con pesos preentrenados y {new_params:,} parámetros nuevos (SAR).")
+
         model.load_state_dict(checkpoint, strict=False)
         print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
 
@@ -161,6 +171,13 @@ if __name__ == "__main__":
  
     parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Parámetros entrenables: {parameters:,}")
+
+    print(f"CUDA disponible: {torch.cuda.is_available()}")
+    print(f"Device: {device}")
+    if torch.cuda.is_available():
+        print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"Samples train: {len(ds_train)}")
+    print(f"Batches por época: {len(loader_train)}")
  
     # Entrenar
     history = fit(
@@ -182,7 +199,7 @@ if __name__ == "__main__":
         version=version,
         filename=save_filename,
         base_model=save_filename,
-        use_sar=sar_mode,
+        sar_mode=sar_mode,
         phase1_info={
             "num_epochs": num_epochs, "lr": lr,
             "T": T, "sigmoid_k": sigmoid_k,

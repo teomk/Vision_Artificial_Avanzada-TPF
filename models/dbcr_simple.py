@@ -355,7 +355,7 @@ class DBCRSimple(nn.Module):
         super().__init__()
 
         self.time_mlp = TimeMLP(time_dim)
-        if control_net is not None:
+        if control_net:
             self.control_net = DBCRControlNet(base_channels=base_channels, time_dim=time_dim)
 
         else:

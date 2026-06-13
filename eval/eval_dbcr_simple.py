@@ -26,20 +26,49 @@ from metrics import mae, psnr, ssim, sam
 
 # ── Evaluación ─────────────────────────────────────────────────────────
 
+def _count_nonfinite(tensor):
+    if tensor is None:
+        return 0
+    return int((~torch.isfinite(tensor)).sum().item())
+
 def evaluate(model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
     model.eval()
     total_mae = total_psnr = total_ssim = total_sam = 0.0
     n_batches = 0
+    skipped_batches = 0
 
     with torch.no_grad():
-        for batch in tqdm(loader, desc="Evaluando", unit="batch"):
+        for batch_idx, batch in enumerate(tqdm(loader, desc="Evaluando", unit="batch"), start=1):
             s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
+
+            bad_inputs = {
+                "s2_cloudy": _count_nonfinite(s2_cloudy),
+                "s2_clean": _count_nonfinite(s2_clean),
+                "condition": _count_nonfinite(condition),
+                "sar": _count_nonfinite(sar),
+            }
+            bad_inputs = {name: count for name, count in bad_inputs.items() if count > 0}
+            if bad_inputs:
+                skipped_batches += 1
+                print(f"[WARN] Batch {batch_idx}: valores no finitos en inputs -> {bad_inputs}. Se omite.")
+                continue
+
             pred = inference(model, s2_cloudy, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k).clamp(0, 1)
+
+            bad_pred = _count_nonfinite(pred)
+            if bad_pred > 0:
+                skipped_batches += 1
+                print(f"[WARN] Batch {batch_idx}: predicción con {bad_pred} valores no finitos. Se omite.")
+                continue
+
             total_mae  += mae(pred, s2_clean)
             total_psnr += psnr(pred, s2_clean)
             total_ssim += ssim(pred, s2_clean)
             total_sam  += sam(pred, s2_clean)
             n_batches  += 1
+
+    if n_batches == 0:
+        raise RuntimeError("No hubo batches válidos para calcular métricas.")
 
     metrics = {"mae": float(total_mae/n_batches), "psnr": float(total_psnr/n_batches), "ssim": float(total_ssim/n_batches), "sam": float(total_sam/n_batches)}
 
@@ -48,6 +77,8 @@ def evaluate(model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
     print(f"  PSNR : {metrics['psnr']:.4f} dB")
     print(f"  SSIM : {metrics['ssim']:.6f}")
     print(f"  SAM  : {metrics['sam']:.4f} °")
+    print(f"  Batches válidos: {n_batches}")
+    print(f"  Batches omitidos: {skipped_batches}")
     print(f"{'='*40}\n")
 
     return metrics
@@ -119,8 +150,15 @@ if __name__ == "__main__":
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     model = DBCRSimple(image_channels=image_channels, condition_channels=condition_channels, base_channels=64, time_dim=128, control_net=(sar_mode == "ControlNet"))
-    model.load_state_dict(checkpoint)
+    if sar_mode != "ControlNet":
+        checkpoint = {
+            k: v for k, v in checkpoint.items()
+            if not k.startswith("control_net.")
+        }
+    model.load_state_dict(checkpoint, strict=True)
     model = model.float().to(device)
+
+    
 
     ds = SEN12MSCRDataset(split=args.split, include_s1=(sar_mode != "None"), include_mask=False)
     loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=cfg["train"]["num_workers"])
