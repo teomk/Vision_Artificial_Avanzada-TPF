@@ -400,3 +400,24 @@ if __name__ == "__main__":
 
     print("Entrenamiento terminado.")
     print(history)
+
+
+# #VM
+# Device: cuda
+# Modelo: DBCR real con SAR branch
+# Batch size: 2
+# Accum steps: 4
+# Batch efectivo: 8
+# Window sf0: 8
+# bf16: True
+# [SEN12MSCRDataset] split=train | triples=8453 | include_s1=True | include_mask=False
+# Parámetros entrenables: 33,870,790
+# ===============================BENCHMARK DBCR — TIEMPO ESTIMADO POR ÉPOCA ======================================================================
+# Dataset samples : 8453 Batches por época : 4227 Batch size real : 2 Accum steps : 4 Batch efectivo : 8 Warmup batches : 5 Timed batches : 30 bf16 autocast : True
+# =============================== RESULTADO ======================================================================
+# Tiempo promedio/batch : 0.570 s
+# Batches por época : 4227
+# Tiempo estimado época : 40.15 min
+# Tiempo estimado época : 0.67 h
+# VRAM pico : 11.671 GB
+# Última loss medida : 0.067871

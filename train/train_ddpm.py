@@ -148,88 +148,88 @@ if __name__ == "__main__":
         alpha_min=alpha_min
     )
 
-    # Dataset
-    ds_train = SEN12MSCRDataset(
-        split="train",
-        include_s1=(sar_mode != "None"),
-        include_mask=False
-    )
-    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"))
+    # # Dataset
+    # ds_train = SEN12MSCRDataset(
+    #     split="train",
+    #     include_s1=(sar_mode != "None"),
+    #     include_mask=False
+    # )
+    # loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"))
 
-    # Modelo
-    model = ConditionalDDPMUNet(
-        image_channels=image_channels,
-        condition_channels=condition_channels,
-        base_channels=base_channels,
-        time_dim=time_dim,
-    ).to(device)
+    # # Modelo
+    # model = ConditionalDDPMUNet(
+    #     image_channels=image_channels,
+    #     condition_channels=condition_channels,
+    #     base_channels=base_channels,
+    #     time_dim=time_dim,
+    # ).to(device)
 
-    if load_filename is not None:
-        checkpoint = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
-        model.load_state_dict(checkpoint, strict=False)
-        print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
+    # if load_filename is not None:
+    #     checkpoint = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
+    #     model.load_state_dict(checkpoint, strict=False)
+    #     print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
 
-    parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Parámetros entrenables: {parameters:,}")
+    # parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # print(f"Parámetros entrenables: {parameters:,}")
 
-    # Entrenar
-    history = fit(
-        model=model,
-        train_loader=loader_train,
-        lr=lr,
-        device=device,
-        sar_mode=sar_mode,
-        noise_scheduler=noise_scheduler,
-        num_epochs=num_epochs,
-    )
+    # # Entrenar
+    # history = fit(
+    #     model=model,
+    #     train_loader=loader_train,
+    #     lr=lr,
+    #     device=device,
+    #     sar_mode=sar_mode,
+    #     noise_scheduler=noise_scheduler,
+    #     num_epochs=num_epochs,
+    # )
 
-    # Subir a HuggingFace
-    upload_model(
-        model_state_dict=model.state_dict(),
-        repo_id=repo_id,
-        filename=save_filename,
-    )
+    # # Subir a HuggingFace
+    # upload_model(
+    #     model_state_dict=model.state_dict(),
+    #     repo_id=repo_id,
+    #     filename=save_filename,
+    # )
 
-    # Registrar versión
-    register_version(
-        repo_id=repo_id,
-        version=version,
-        filename=save_filename,
-        base_model=cfg_hf.get("base_model", save_filename),
-        sar_mode=sar_mode,
-        phase1_info={
-            "num_epochs": num_epochs, "lr": lr,
-            "T": T, "sigmoid": sigmoid_k, "alpha_min": alpha_min,
-            "batch_size": batch_size, "num_weights": parameters,
-            "sar_mode": sar_mode,
-        },
-        phase2_info={
-            "Nada": 0
-        },
-        notes=notes,
-    )
+    # # Registrar versión
+    # register_version(
+    #     repo_id=repo_id,
+    #     version=version,
+    #     filename=save_filename,
+    #     base_model=cfg_hf.get("base_model", save_filename),
+    #     sar_mode=sar_mode,
+    #     phase1_info={
+    #         "num_epochs": num_epochs, "lr": lr,
+    #         "T": T, "sigmoid": sigmoid_k, "alpha_min": alpha_min,
+    #         "batch_size": batch_size, "num_weights": parameters,
+    #         "sar_mode": sar_mode,
+    #     },
+    #     phase2_info={
+    #         "Nada": 0
+    #     },
+    #     notes=notes,
+    # )
 
-    # Guardar history local
-    history_data = {
-        "train_loss": history["train_loss"],
-        "config": {
-            "num_epochs": num_epochs,
-            "lr": lr,
-            "batch_size": batch_size,
-            "T": T,
-            "beta_schedule": "sigmoid",
-            "sar_mode": sar_mode,
-            "num_parameters": parameters,
-        }
-    }
+    # # Guardar history local
+    # history_data = {
+    #     "train_loss": history["train_loss"],
+    #     "config": {
+    #         "num_epochs": num_epochs,
+    #         "lr": lr,
+    #         "batch_size": batch_size,
+    #         "T": T,
+    #         "beta_schedule": "sigmoid",
+    #         "sar_mode": sar_mode,
+    #         "num_parameters": parameters,
+    #     }
+    # }
 
-    history_dir = ROOT / "training_history"
-    history_dir.mkdir(parents=True, exist_ok=True)
+    # history_dir = ROOT / "training_history"
+    # history_dir.mkdir(parents=True, exist_ok=True)
 
-    history_filename = save_filename.replace(".pth", "_history.yaml")
-    history_path     = history_dir / history_filename
+    # history_filename = save_filename.replace(".pth", "_history.yaml")
+    # history_path     = history_dir / history_filename
 
-    with open(history_path, "w") as f:
-        yaml.safe_dump(history_data, f, sort_keys=False)
+    # with open(history_path, "w") as f:
+    #     yaml.safe_dump(history_data, f, sort_keys=False)
 
-    print(f"History guardado en: {history_path}")
+    # print(f"History guardado en: {history_path}")

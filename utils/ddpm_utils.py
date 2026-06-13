@@ -1,5 +1,6 @@
 import torch
 from diffusers import DDPMScheduler
+from tqdm.auto import tqdm
 
 def make_sigmoid_alpha_bar_schedule(T, sigmoid_k=25.0, alpha_min=1e-4):
     """
@@ -61,6 +62,9 @@ def build_sigmoid_ddpm_scheduler(T, sigmoid_k=25.0, alpha_min=1e-4):
         sigmoid_k=sigmoid_k,
         alpha_min=alpha_min
     )
+    print(f"alpha_bar[0]   = {alpha_bar[0]:.4f}")    # debería ser ~1.0
+    print(f"alpha_bar[500] = {alpha_bar[500]:.4f}")  # debería ser ~0.5
+    print(f"alpha_bar[999] = {alpha_bar[999]:.4f}")  # debería ser ~alpha_min
 
     betas = alpha_bar_to_betas(alpha_bar)
 
@@ -88,9 +92,9 @@ def inference(model, condition, device, scheduler, steps=50, sar=None):
     scheduler.set_timesteps(steps)
 
     with torch.no_grad():
-        for t_val in scheduler.timesteps:
+        for t_val in tqdm(scheduler.timesteps, desc="DDPM", unit="step", leave=False):
             t          = t_val.repeat(B).to(device)
             noise_pred = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
             x_t        = scheduler.step(noise_pred, t_val, x_t).prev_sample
 
-    return x_t
+    return x_t.clamp(0, 1)

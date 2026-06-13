@@ -6,6 +6,7 @@ import sys
 import argparse
 import yaml
 from pathlib import Path
+from tqdm.auto import tqdm
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "dataset"
@@ -34,7 +35,7 @@ def visualize_samples(model, dataset, device, scheduler, sar_mode="None", n_samp
     gs  = gridspec.GridSpec(n_samples, 3, figure=fig, hspace=0.05, wspace=0.05)
 
     with torch.no_grad():
-        for row, idx in enumerate(indices):
+        for row, idx in enumerate(tqdm(indices, desc="Muestras", unit="img")):
             if sar_mode == "None":
                 cloudy, clear = dataset[idx]
                 cloudy_b  = cloudy.unsqueeze(0).float().to(device)
@@ -61,11 +62,22 @@ def visualize_samples(model, dataset, device, scheduler, sar_mode="None", n_samp
             pred = inference(model, condition, device, scheduler, steps=steps, sar=sar)
             pred = pred.squeeze(0).clamp(0, 1).cpu()
 
-            stats = get_rgb_stats(cloudy, pred, clear)
+            # Debug
+            print(f"pred  min={pred.min():.4f}  max={pred.max():.4f}  mean={pred.mean():.4f}")
+            print(f"clear min={clear.min():.4f} max={clear.max():.4f} mean={clear.mean():.4f}")
+
+            # Ver los valores de las bandas RGB específicamente
+            rgb_pred  = pred[[2, 1, 0]]
+            print(f"pred  R={rgb_pred[0].mean():.4f}  G={rgb_pred[1].mean():.4f}  B={rgb_pred[2].mean():.4f}")
+
+            stats = get_rgb_stats(cloudy, clear)
 
             for col, img in enumerate([cloudy, pred, clear]):
                 ax = fig.add_subplot(gs[row, col])
-                ax.imshow(to_rgb(img, stats=stats))
+                if col == 1:  # pred
+                    ax.imshow(to_rgb(img, stats=None))
+                else:
+                    ax.imshow(to_rgb(img, stats=stats))
                 ax.axis("off")
                 if row == 0:
                     ax.set_title(col_labels[col], fontsize=11, pad=6)

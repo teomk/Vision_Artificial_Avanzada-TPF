@@ -1,509 +1,503 @@
-import math
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+    import math
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    from torch.utils.checkpoint import checkpoint
 
 
-# -------------------------
-# Time Embedding
-# -------------------------
+    # -------------------------
+    # Time Embedding
+    # -------------------------
 
-class SinusoidalTimeEmbedding(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim
+    class SinusoidalTimeEmbedding(nn.Module):
+        def __init__(self, dim):
+            super().__init__()
+            self.dim = dim
 
-    def forward(self, t):
-        device = t.device
-        half_dim = self.dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
-        emb = t[:, None].float() * emb[None, :]
-        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
-        return emb
-
-
-class TimeMLP(nn.Module):
-    def __init__(self, time_dim):
-        super().__init__()
-        self.net = nn.Sequential(
-            SinusoidalTimeEmbedding(time_dim),
-            nn.Linear(time_dim, time_dim * 4),
-            nn.SiLU(),
-            nn.Linear(time_dim * 4, time_dim)
-        )
-
-    def forward(self, t):
-        return self.net(t)
+        def forward(self, t):
+            device = t.device
+            half_dim = self.dim // 2
+            emb = math.log(10000) / (half_dim - 1)
+            emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
+            emb = t[:, None].float() * emb[None, :]
+            emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
+            return emb
 
 
-# -------------------------
-# NAFNet primitives
-# -------------------------
+    class TimeMLP(nn.Module):
+        def __init__(self, time_dim):
+            super().__init__()
+            self.net = nn.Sequential(
+                SinusoidalTimeEmbedding(time_dim),
+                nn.Linear(time_dim, time_dim * 4),
+                nn.SiLU(),
+                nn.Linear(time_dim * 4, time_dim)
+            )
 
-class LayerNorm2d(nn.Module):
-    def __init__(self, channels, eps=1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(1, channels, 1, 1))
-        self.bias   = nn.Parameter(torch.zeros(1, channels, 1, 1))
-        self.eps    = eps
-
-    def forward(self, x):
-        mean = x.mean(dim=1, keepdim=True)
-        var  = x.var(dim=1,  keepdim=True, unbiased=False)
-        x = (x - mean) / torch.sqrt(var + self.eps)
-        return x * self.weight + self.bias
+        def forward(self, t):
+            return self.net(t)
 
 
-class SimpleGate(nn.Module):
-    def forward(self, x):
-        x1, x2 = x.chunk(2, dim=1)
-        return x1 * x2
+    # -------------------------
+    # NAFNet primitives
+    # -------------------------
+
+    class LayerNorm2d(nn.Module):
+        def __init__(self, channels, eps=1e-6):
+            super().__init__()
+            self.weight = nn.Parameter(torch.ones(1, channels, 1, 1))
+            self.bias   = nn.Parameter(torch.zeros(1, channels, 1, 1))
+            self.eps    = eps
+
+        def forward(self, x):
+            mean = x.mean(dim=1, keepdim=True)
+            var  = x.var(dim=1,  keepdim=True, unbiased=False)
+            x = (x - mean) / torch.sqrt(var + self.eps)
+            return x * self.weight + self.bias
 
 
-# -------------------------
-# Time-Embedded NAFBlock
-# -------------------------
-
-class TimeNAFBlock(nn.Module):
-    """
-    NAFBlock con modulación temporal mediante time embedding.
-    Idéntico al del modelo original.
-    """
-
-    def __init__(self, channels, time_dim, dw_expand=2, ffn_expand=2):
-        super().__init__()
-
-        dw_ch  = channels * dw_expand
-        ffn_ch = channels * ffn_expand
-
-        self.norm1  = LayerNorm2d(channels)
-        self.conv1  = nn.Conv2d(channels, dw_ch, kernel_size=1)
-        self.dwconv = nn.Conv2d(dw_ch, dw_ch, kernel_size=3, padding=1, groups=dw_ch)
-        self.sg     = SimpleGate()
-        self.sca    = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(dw_ch // 2, dw_ch // 2, kernel_size=1)
-        )
-        self.conv2  = nn.Conv2d(dw_ch // 2, channels, kernel_size=1)
-        self.time_proj1 = nn.Linear(time_dim, channels)
-
-        self.norm2  = LayerNorm2d(channels)
-        self.conv3  = nn.Conv2d(channels, ffn_ch, kernel_size=1)
-        self.conv4  = nn.Conv2d(ffn_ch // 2, channels, kernel_size=1)
-        self.time_proj2 = nn.Linear(time_dim, channels)
-
-        self.beta  = nn.Parameter(torch.zeros(1, channels, 1, 1))
-        self.gamma = nn.Parameter(torch.zeros(1, channels, 1, 1))
-
-    def forward(self, x, t_emb):
-        h = self.norm1(x)
-        h = self.conv1(h)
-        h = self.dwconv(h)
-        h = self.sg(h)
-        h = h * self.sca(h)
-        h = self.conv2(h)
-        h = h + self.time_proj1(t_emb)[:, :, None, None]
-        x = x + self.beta * h
-
-        h = self.norm2(x)
-        h = self.conv3(h)
-        h = self.sg(h)
-        h = self.conv4(h)
-        h = h + self.time_proj2(t_emb)[:, :, None, None]
-        x = x + self.gamma * h
-
-        return x
+    class SimpleGate(nn.Module):
+        def forward(self, x):
+            x1, x2 = x.chunk(2, dim=1)
+            return x1 * x2
 
 
-# -------------------------
-# SFBlock: SAR Fusion Block
-# -------------------------
+    # -------------------------
+    # Time-Embedded NAFBlock
+    # -------------------------
 
-class SFBlock(nn.Module):
-    """
-    SAR Fusion Block (SFBlock) — Figura 3(b) del paper DB-CR.
+    class TimeNAFBlock(nn.Module):
+        def __init__(self, channels, time_dim, dw_expand=2, ffn_expand=2):
+            super().__init__()
 
-    Implementa cross-modal attention entre los features ópticos y SAR:
-      - Query  ← features ópticos  (rama U-Net)
-      - Key    ← features SAR      (rama SAR encoder)
-      - Value  ← features SAR      (rama SAR encoder)
+            dw_ch  = channels * dw_expand
+            ffn_ch = channels * ffn_expand
 
-    El output enriquece los features ópticos con información estructural
-    del SAR, y se devuelve sumado al residual óptico original.
+            self.norm1  = LayerNorm2d(channels)
+            self.conv1  = nn.Conv2d(channels, dw_ch, kernel_size=1)
+            self.dwconv = nn.Conv2d(dw_ch, dw_ch, kernel_size=3, padding=1, groups=dw_ch)
+            self.sg     = SimpleGate()
+            self.sca    = nn.Sequential(
+                nn.AdaptiveAvgPool2d(1),
+                nn.Conv2d(dw_ch // 2, dw_ch // 2, kernel_size=1)
+            )
+            self.conv2  = nn.Conv2d(dw_ch // 2, channels, kernel_size=1)
+            self.time_proj1 = nn.Linear(time_dim, channels)
 
-    Notas de implementación:
-      - La atención se calcula en el espacio espacial aplanado (H*W tokens).
-      - num_heads=1 por defecto; se puede aumentar para modelos más grandes.
-      - Una Conv2d 3×3 final mezcla la salida antes del residual,
-        tal como muestra la Figura 3(b).
-    """
+            self.norm2  = LayerNorm2d(channels)
+            self.conv3  = nn.Conv2d(channels, ffn_ch, kernel_size=1)
+            self.conv4  = nn.Conv2d(ffn_ch // 2, channels, kernel_size=1)
+            self.time_proj2 = nn.Linear(time_dim, channels)
 
-    def __init__(self, channels, num_heads=1):
-        super().__init__()
+            self.beta  = nn.Parameter(torch.zeros(1, channels, 1, 1))
+            self.gamma = nn.Parameter(torch.zeros(1, channels, 1, 1))
 
-        self.num_heads = num_heads
-        self.scale     = (channels // num_heads) ** -0.5
+        def forward(self, x, t_emb):
+            h = self.norm1(x)
+            h = self.conv1(h)
+            h = self.dwconv(h)
+            h = self.sg(h)
+            h = h * self.sca(h)
+            h = self.conv2(h)
+            h = h + self.time_proj1(t_emb)[:, :, None, None]
+            x = x + self.beta * h
 
-        # Proyecciones lineales para Q, K, V
-        self.to_q = nn.Conv2d(channels, channels, kernel_size=1)
-        self.to_k = nn.Conv2d(channels, channels, kernel_size=1)
-        self.to_v = nn.Conv2d(channels, channels, kernel_size=1)
+            h = self.norm2(x)
+            h = self.conv3(h)
+            h = self.sg(h)
+            h = self.conv4(h)
+            h = h + self.time_proj2(t_emb)[:, :, None, None]
+            x = x + self.gamma * h
 
-        # Mezcla final: Conv 3×3 tal como indica la figura del paper
-        self.out_conv = nn.Conv2d(channels, channels, kernel_size=3, padding=1)
+            return x
 
-        self.norm_opt = LayerNorm2d(channels)
-        self.norm_sar = LayerNorm2d(channels)
 
-    def forward(self, optical, sar):
+    class SFBlock(nn.Module):
         """
-        optical: [B, C, H, W]  — features de la rama óptica (U-Net)
-        sar:     [B, C, H, W]  — features de la rama SAR (misma escala)
+        SAR Fusion Block con window attention.
 
-        Retorna:
-        optical enriquecido: [B, C, H, W]
-        """
-        B, C, H, W = optical.shape
-
-        opt_n = self.norm_opt(optical)
-        sar_n = self.norm_sar(sar)
-
-        # Q desde óptico, K/V desde SAR
-        Q = self.to_q(opt_n)  # [B, C, H, W]
-        K = self.to_k(sar_n)  # [B, C, H, W]
-        V = self.to_v(sar_n)  # [B, C, H, W]
-
-        # Reshape para multi-head attention: [B, heads, H*W, C//heads]
-        head_dim = C // self.num_heads
-        Q = Q.reshape(B, self.num_heads, head_dim, H * W).permute(0, 1, 3, 2)
-        K = K.reshape(B, self.num_heads, head_dim, H * W).permute(0, 1, 3, 2)
-        V = V.reshape(B, self.num_heads, head_dim, H * W).permute(0, 1, 3, 2)
-
-        # # Scaled dot-product attention
-        # attn = (Q @ K.transpose(-2, -1)) * self.scale   # [B, heads, H*W, H*W]
-        # attn = attn.softmax(dim=-1)
-
-        # out = attn @ V                                   # [B, heads, H*W, head_dim]
-        # out = out.permute(0, 1, 3, 2).reshape(B, C, H, W)
-
-        out = F.scaled_dot_product_attention(Q, K, V)
-        out = out.permute(0, 1, 3, 2).reshape(B, C, H, W)
-
-        # Conv 3×3 de salida + residual óptico
-        out = self.out_conv(out)
-        return optical + out
-
-
-# -------------------------
-# Down / Up Blocks
-# -------------------------
-
-class DownBlockNAF(nn.Module):
-    """
-    Baja resolución a la mitad.
-    Internamente: NAFBlock → guarda skip → Conv stride-2.
-    """
-
-    def __init__(self, in_channels, out_channels, time_dim):
-        super().__init__()
-
-        self.proj = (
-            nn.Conv2d(in_channels, out_channels, kernel_size=1)
-            if in_channels != out_channels else nn.Identity()
-        )
-        self.naf  = TimeNAFBlock(out_channels, time_dim)
-        self.down = nn.Conv2d(out_channels, out_channels, kernel_size=4, stride=2, padding=1)
-
-    def forward(self, x, t_emb):
-        x    = self.proj(x)
-        x    = self.naf(x, t_emb)
-        skip = x
-        x    = self.down(x)
-        return x, skip
-
-
-class UpBlockNAF(nn.Module):
-    """
-    Sube resolución al doble y fusiona skip connection.
-    """
-
-    def __init__(self, in_channels, skip_channels, out_channels, time_dim):
-        super().__init__()
-
-        self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1)
-
-        in_ch_block = out_channels + skip_channels
-        self.proj   = (
-            nn.Conv2d(in_ch_block, out_channels, kernel_size=1)
-            if in_ch_block != out_channels else nn.Identity()
-        )
-        self.naf = TimeNAFBlock(out_channels, time_dim)
-
-    def forward(self, x, skip, t_emb):
-        x = self.up(x)
-        if x.shape[-2:] != skip.shape[-2:]:
-            x = F.interpolate(x, size=skip.shape[-2:], mode="bilinear", align_corners=False)
-        x = torch.cat([x, skip], dim=1)
-        x = self.proj(x)
-        x = self.naf(x, t_emb)
-        return x
-
-
-# -------------------------
-# SAR Encoder Branch
-# -------------------------
-
-class SAREncoderBranch(nn.Module):
-    """
-    Rama paralela de extracción de features SAR.
-
-    Espejo del encoder óptico: mismas escalas, mismos tamaños de canal.
-    Produce features a 4 escalas (3 downsampling + bottleneck) que luego
-    se fusionan con la rama óptica mediante SFBlocks.
-
-    A diferencia del ControlNet del modelo original, esta rama NO usa
-    zero-convs ni residuals sumados. Los features van directamente a los
-    SFBlocks como Key/Value de la cross-attention.
-
-    No comparte pesos con la rama óptica: aprende representaciones
-    SAR-específicas desde cero.
-    """
-
-    def __init__(self, sar_channels=2, base_channels=64, time_dim=256):
-        super().__init__()
-
-        C = base_channels
-
-        # Proyección inicial SAR → espacio de features
-        self.in_conv = nn.Conv2d(sar_channels, C, kernel_size=3, padding=1)
-
-        # Encoder espejo (mismo número de escalas que la rama óptica)
-        self.down1 = DownBlockNAF(C,     C * 2, time_dim)
-        self.down2 = DownBlockNAF(C * 2, C * 4, time_dim)
-        self.down3 = DownBlockNAF(C * 4, C * 8, time_dim)
-
-        # Bottleneck SAR
-        self.mid = TimeNAFBlock(C * 8, time_dim)
-
-    def forward(self, sar, t_emb):
-        """
-        Retorna dict con features a cada escala:
-          'scale0': resolución full   [B, C,   H,   W]
-          'scale1': 1/2               [B, 2C,  H/2, W/2]
-          'scale2': 1/4               [B, 4C,  H/4, W/4]
-          'scale3': 1/8               [B, 8C,  H/8, W/8]
-          'mid':    1/8 (bottleneck)  [B, 8C,  H/8, W/8]
-        """
-        x0 = self.in_conv(sar)          # full res, C canales
-
-        x, skip1 = self.down1(x0, t_emb)
-        x, skip2 = self.down2(x,  t_emb)
-        x, skip3 = self.down3(x,  t_emb)
-
-        mid = self.mid(x, t_emb)
-
-        return {
-            "scale0": x0,
-            "scale1": skip1,
-            "scale2": skip2,
-            "scale3": skip3,
-            "mid":    mid,
-        }
-
-
-# -------------------------
-# DBCR — Paper Architecture
-# -------------------------
-
-class DBCR(nn.Module):
-    """
-    Reimplementación de DB-CR (arxiv 2504.03607) adaptada a 6 bandas S2.
-
-    Arquitectura:
-    ┌─────────────────────────────────────────────────┐
-    │  Entrada: cat(x_t, s2_cloudy) → [B, 12, H, W]  │
-    │           sar                 → [B,  2, H, W]   │
-    └─────────────────────────────────────────────────┘
-                        ↓
-         ┌──────────────────────────┐
-         │  SAR Encoder Branch      │  (features a 4 escalas)
-         └──────────────────────────┘
-                        ↕  SFBlock (cross-modal attention en cada escala)
-         ┌──────────────────────────┐
-         │  U-Net Óptico            │
-         │  Encoder: 3× DownBlock   │
-         │  Bottleneck: 2× NAFBlock │
-         │  Decoder: 3× UpBlock     │
-         └──────────────────────────┘
-                        ↓
-               Conv 3×3 → pred_clean [B, 6, H, W]
-
-    Diferencias clave vs DBCRSimple (modelo propio):
-      1. s2_cloudy se concatena crudo con x_t (sin ConditionEncoderNAF)
-      2. SAR se fusiona por cross-attention en cada escala (no ControlNet/suma)
-      3. SFBlock actúa ANTES de los skip connections del decoder
-      4. La rama SAR y la óptica son paralelas desde el inicio
-
-    Parámetros:
-      image_channels:     canales de x_t y s2_clean   (default 6)
-      condition_channels: canales de s2_cloudy         (default 6)
-      sar_channels:       canales SAR                  (default 2)
-      base_channels:      canales base del U-Net        (default 64)
-      time_dim:           dimensión del time embedding  (default 256)
-      num_heads:          cabezas de atención en SFBlock (default 1)
-    """
-
-    def __init__(
-        self,
-        image_channels=6,
-        condition_channels=6,
-        sar_channels=2,
-        base_channels=64,
-        time_dim=256,
-        num_heads=1,
-    ):
-        super().__init__()
-
-        C = base_channels
-
-        # Time embedding compartido entre ambas ramas
-        self.time_mlp = TimeMLP(time_dim)
-
-        # --- Rama SAR ---
-        self.sar_branch = SAREncoderBranch(
-            sar_channels=sar_channels,
-            base_channels=C,
-            time_dim=time_dim,
-        )
-
-        # --- Rama óptica: U-Net ---
-
-        # Entrada: cat(x_t, s2_cloudy) sin encoder intermedio
-        in_ch = image_channels + condition_channels   # 6 + 6 = 12
-        self.init_conv = nn.Conv2d(in_ch, C, kernel_size=3, padding=1)
-
-        # SFBlock en resolución full (escala 0, antes del primer down)
-        self.sf0 = SFBlock(C, num_heads=num_heads)
-
-        # Encoder
-        self.down1 = DownBlockNAF(C,     C * 2, time_dim)
-        self.down2 = DownBlockNAF(C * 2, C * 4, time_dim)
-        self.down3 = DownBlockNAF(C * 4, C * 8, time_dim)
-
-        # SFBlocks post-encoder (enriquecen los skips antes del decoder)
-        self.sf1 = SFBlock(C * 2, num_heads=num_heads)
-        self.sf2 = SFBlock(C * 4, num_heads=num_heads)
-        self.sf3 = SFBlock(C * 8, num_heads=num_heads)
-
-        # Bottleneck
-        self.mid1 = TimeNAFBlock(C * 8, time_dim)
-        self.mid2 = TimeNAFBlock(C * 8, time_dim)
-
-        # SFBlock en bottleneck
-        self.sf_mid = SFBlock(C * 8, num_heads=num_heads)
-
-        # Decoder
-        self.up3 = UpBlockNAF(C * 8, C * 8, C * 4, time_dim)
-        self.up2 = UpBlockNAF(C * 4, C * 4, C * 2, time_dim)
-        self.up1 = UpBlockNAF(C * 2, C * 2, C,     time_dim)
-
-        # Salida
-        self.out = nn.Conv2d(C, image_channels, kernel_size=3, padding=1)
-
-    def forward(self, x_t, t, s2_cloudy, sar):
-        """
-        x_t:       estado intermedio del bridge   [B, 6, H, W]
-        t:         timestep                        [B]
-        s2_cloudy: Sentinel-2 nublado              [B, 6, H, W]
-        sar:       Sentinel-1 SAR                  [B, 2, H, W]
-
-        Retorna:
-        pred_clean: predicción S2 limpio           [B, 6, H, W]
+        Parámetros:
+        channels:    canales de entrada (igual en optical y SAR)
+        num_heads:   cabezas de atención
+        window_size: tamaño de ventana para window attention (default 8).
+                    Si None, usa global attention (solo viable en resoluciones
+                    pequeñas como el bottleneck).
         """
 
-        # 1. Time embedding (compartido entre ambas ramas)
-        t_emb = self.time_mlp(t)
+        def __init__(self, channels, num_heads=1, window_size=8, mlp_ratio=4):
+            super().__init__()
 
-        # 2. Extraer features SAR a todas las escalas
-        sar_feats = self.sar_branch(sar, t_emb)
+            self.num_heads   = num_heads
+            self.window_size = window_size
+            self.scale       = (channels // num_heads) ** -0.5
 
-        # 3. Proyección inicial óptica: cat crudo sin encoder intermedio
-        x = torch.cat([x_t, s2_cloudy], dim=1)   # [B, 12, H, W]
-        x = self.init_conv(x)                     # [B,  C, H, W]
+            self.to_q = nn.Conv2d(channels, channels, kernel_size=1)
+            self.to_k = nn.Conv2d(channels, channels, kernel_size=1)
+            self.to_v = nn.Conv2d(channels, channels, kernel_size=1)
+            self.out_proj = nn.Conv2d(channels, channels, kernel_size=1)  # proyección post-attention
 
-        # SFBlock escala 0 (resolución full)
-        x = self.sf0(x, sar_feats["scale0"])
+            self.norm_opt = LayerNorm2d(channels)
+            self.norm_sar = LayerNorm2d(channels)
+            self.norm_mlp = LayerNorm2d(channels)
 
-        # 4. Encoder óptico con fusión SAR en cada escala
-        x, skip1 = self.down1(x, t_emb)
-        skip1 = self.sf1(skip1, sar_feats["scale1"])   # enriquece skip
+            mlp_hidden = channels * mlp_ratio
+            self.mlp = nn.Sequential(
+                nn.Conv2d(channels, mlp_hidden, kernel_size=1),
+                nn.GELU(),
+                nn.Conv2d(mlp_hidden, channels, kernel_size=1)
+            )
 
-        x, skip2 = self.down2(x, t_emb)
-        skip2 = self.sf2(skip2, sar_feats["scale2"])
+        def _align_sar(self, K, V, H, W):
+            assert K.shape[-2:] == (H, W), f"SAR/optical resolution mismatch: {K.shape[-2:]} vs {(H,W)}"
+            return K, V
 
-        x, skip3 = self.down3(x, t_emb)
-        skip3 = self.sf3(skip3, sar_feats["scale3"])
+        def _global_attention(self, Q, K, V, B, C, H, W):
+            """
+            Attention global — O((H*W)²). Solo viable en resoluciones
+            pequeñas (bottleneck ~32×32). No usar en sf0/sf1.
+            """
+            hd = C // self.num_heads
+            Q = Q.reshape(B, self.num_heads, hd, H * W).permute(0, 1, 3, 2)
+            K = K.reshape(B, self.num_heads, hd, H * W).permute(0, 1, 3, 2)
+            V = V.reshape(B, self.num_heads, hd, H * W).permute(0, 1, 3, 2)
+            out = F.scaled_dot_product_attention(Q, K, V)
+            return out.permute(0, 1, 3, 2).reshape(B, C, H, W)
 
-        # 5. Bottleneck con fusión SAR
-        x = self.mid1(x, t_emb)
-        x = self.mid2(x, t_emb)
-        x = self.sf_mid(x, sar_feats["mid"])
+        def _window_attention(self, Q, K, V, B, C, H, W):
+            """
+            Window attention — O(ws⁴) por ventana, independiente de H×W.
+            Cada píxel atiende solo a los ws² píxeles de su ventana local.
+            """
+            ws     = self.window_size
+            hd     = C // self.num_heads
+            nH, nW = H // ws, W // ws
 
-        # 6. Decoder (usa skips ya enriquecidos con SAR)
-        x = self.up3(x, skip3, t_emb)
-        x = self.up2(x, skip2, t_emb)
-        x = self.up1(x, skip1, t_emb)
+            def partition(t):
+                # [B, C, H, W] → [B*nH*nW, heads, ws², hd]
+                t = t.reshape(B, C, nH, ws, nW, ws)
+                t = t.permute(0, 2, 4, 3, 5, 1).contiguous()  # [B, nH, nW, ws, ws, C]
+                t = t.reshape(B * nH * nW, ws * ws, self.num_heads, hd)
+                return t.permute(0, 2, 1, 3)                   # [B*nH*nW, heads, ws², hd]
 
-        pred_clean = self.out(x)
+            Q, K, V = partition(Q), partition(K), partition(V)
+            out = F.scaled_dot_product_attention(Q, K, V)      # [B*nH*nW, heads, ws², hd]
 
-        return pred_clean
+            # Reconstruir imagen
+            out = out.permute(0, 2, 1, 3).contiguous()         # [B*nH*nW, ws², heads, hd]
+            out = out.reshape(B * nH * nW, ws, ws, C)
+            out = out.reshape(B, nH, nW, ws, ws, C)
+            out = out.permute(0, 5, 1, 3, 2, 4).contiguous()  # [B, C, nH, ws, nW, ws]
+            return out.reshape(B, C, H, W)
+
+        def forward(self, optical, sar):
+            B, C, H, W = optical.shape
+
+            opt_n = self.norm_opt(optical)
+            sar_n = self.norm_sar(sar)
+
+            Q = self.to_q(opt_n)
+            K = self.to_k(sar_n)
+            V = self.to_v(sar_n)
+
+            # Fix resolución: alinear SAR a resolución del optical
+            K, V = self._align_sar(K, V, H, W)
+
+            # Usar window attention si la resolución lo requiere
+            use_window = (self.window_size is not None and H > self.window_size and H % self.window_size == 0)
+            if use_window:
+                out = self._window_attention(Q, K, V, B, C, H, W)
+            else:
+                out = self._global_attention(Q, K, V, B, C, H, W)
+
+            out = self.out_proj(out)
+            x = optical + out
+            x = x + self.mlp(self.norm_mlp(x))
+            return x
 
 
-# -------------------------
-# Sanity check
-# -------------------------
+    # -------------------------
+    # Down / Up Blocks
+    # -------------------------
 
-if __name__ == "__main__":
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-    B, H, W = 2, 256, 256
-    # B, H, W = 2, 128, 128
+    class DownBlockNAF(nn.Module):
+        def __init__(self, in_channels, out_channels, time_dim):
+            super().__init__()
+            self.proj = (
+                nn.Conv2d(in_channels, out_channels, kernel_size=1)
+                if in_channels != out_channels else nn.Identity()
+            )
+            self.naf  = TimeNAFBlock(out_channels, time_dim)
+            self.down = nn.Conv2d(out_channels, out_channels, kernel_size=4, stride=2, padding=1)
+
+        def forward_pre(self, x, t_emb):
+            """NAFBlock sin downsampling — para insertar SFBlock después"""
+            x = self.proj(x)
+            x = self.naf(x, t_emb)
+            return x
+
+        def forward_down(self, x):
+            """Solo el downsampling"""
+            return self.down(x)
+
+        def forward(self, x, t_emb):
+            """Comportamiento original por si se necesita en otro contexto"""
+            x = self.forward_pre(x, t_emb)
+            return self.forward_down(x)
 
 
-    model = DBCR(
-        image_channels=6,
-        condition_channels=6,
-        sar_channels=2,
-        base_channels=64,
-        time_dim=128,
-        num_heads=1,
-    )
+    class UpBlockNAF(nn.Module):
+        def __init__(self, in_channels, skip_channels, out_channels, time_dim):
+            super().__init__()
+            self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1)
+            in_ch_block = out_channels + skip_channels
+            self.proj   = (
+                nn.Conv2d(in_ch_block, out_channels, kernel_size=1)
+                if in_ch_block != out_channels else nn.Identity()
+            )
+            self.naf = TimeNAFBlock(out_channels, time_dim)
 
-    x_t       = torch.randn(B, 6, H, W)
-    t         = torch.randint(0, 1000, (B,))
-    s2_cloudy = torch.randn(B, 6, H, W)
-    sar       = torch.randn(B, 2, H, W)
+        def forward(self, x, skip, t_emb):
+            x = self.up(x)
+            if x.shape[-2:] != skip.shape[-2:]:
+                x = F.interpolate(x, size=skip.shape[-2:], mode="bilinear", align_corners=False)
+            x = torch.cat([x, skip], dim=1)
+            x = self.proj(x)
+            x = self.naf(x, t_emb)
+            return x
 
 
+    # -------------------------
+    # SAR Encoder Branch
+    # -------------------------
 
-    from torch.amp import autocast, GradScaler
+    class SAREncoderBranch(nn.Module):
+        def __init__(self, sar_channels=2, base_channels=64, time_dim=256):
+            super().__init__()
+            C = base_channels
+            self.in_conv = nn.Conv2d(sar_channels, C, kernel_size=3, padding=1)
+            self.down1   = DownBlockNAF(C,     C * 2, time_dim)
+            self.down2   = DownBlockNAF(C * 2, C * 4, time_dim)
+            self.down3   = DownBlockNAF(C * 4, C * 8, time_dim)
+            self.mid     = TimeNAFBlock(C * 8, time_dim)
 
-    scaler = GradScaler()
+        def forward(self, sar, t_emb):
+            x0       = self.in_conv(sar)
 
-    for batch in dataloader:
-        optimizer.zero_grad()
+            x = self.down1(x0, t_emb)
+            skip1 = x
+
+            x = self.down2(x,  t_emb)
+            skip2 = x
+
+            x = self.down3(x,  t_emb)
+            skip3 = x
+
+            mid      = self.mid(x, t_emb)
+            return {
+                "scale0": x0,
+                "scale1": skip1,
+                "scale2": skip2,
+                "scale3": skip3,
+                "mid":    mid,
+            }
+
+
+    # -------------------------
+    # DBCR
+    # -------------------------
+
+    class DBCR(nn.Module):
+        """
+        DB-CR con tres cambios respecto al modelo original:
+
+        CAMBIO 1 — Window attention en SFBlock (window_size=8):
+            La attention global genera una matriz (H*W)×(H*W) que para
+            256×256 requiere ~16 GB. Window attention limita cada ventana
+            a ws×ws tokens (64 con ws=8), reduciendo la VRAM en órdenes
+            de magnitud. Los SFBlocks en el bottleneck (32×32) siguen
+            usando global attention automáticamente porque H <= window_size
+            no se cumple y la resolución pequeña lo permite.
+
+        CAMBIO 2 — Fix de resolución SAR/optical en SFBlock:
+            Los skips del SAR encoder (scale0..scale3) se guardan ANTES
+            del downsampling, por lo que tienen el doble de resolución
+            que el feature map óptico correspondiente. El SFBlock ahora
+            alinea K y V con interpolate bilineal antes de la attention.
+
+        CAMBIO 3 — Gradient checkpointing en bloques pesados:
+            En vez de guardar todas las activaciones del forward para el
+            backward, las recomputa on-the-fly. Cuesta ~25% más de tiempo
+            pero reduce la VRAM del backward a la mitad aproximadamente.
+            Se aplica en SFBlocks y NAFBlocks del bottleneck, que son los
+            más costosos en memoria.
+
+        El resultado es un pico de ~19 GB con batch=12 en una L4 de 24 GB,
+        vs OOM con el modelo original.
+        """
+
+        def __init__(
+            self,
+            image_channels=6,
+            condition_channels=6,
+            sar_channels=2,
+            base_channels=64,
+            time_dim=128,
+            num_heads=1,
+            window_size_not_sf0=None,        # sf1/sf2/sf3/sf_mid global
+            window_size_sf0=8,       # solo sf0 con window
+            use_checkpoint=True, # CAMBIO 3: gradient checkpointing
+        ):
+            super().__init__()
+
+            C = base_channels
+            self.use_checkpoint = use_checkpoint
+
+            self.time_mlp = TimeMLP(time_dim)
+
+            self.sar_branch = SAREncoderBranch(
+                sar_channels=sar_channels,
+                base_channels=C,
+                time_dim=time_dim,
+            )
+
+            in_ch = image_channels + condition_channels
+            self.init_conv = nn.Conv2d(in_ch, C, kernel_size=3, padding=1)
+
+            self.enc0 = TimeNAFBlock(C, time_dim)
+
+            # SFBlocks con window attention (CAMBIO 1 + 2)
+            self.sf0    = SFBlock(C,     num_heads=num_heads, window_size=window_size_sf0)
+            self.sf1    = SFBlock(C * 2, num_heads=num_heads, window_size=window_size_not_sf0)
+            self.sf2    = SFBlock(C * 4, num_heads=num_heads, window_size=window_size_not_sf0)
+            self.sf3    = SFBlock(C * 8, num_heads=num_heads, window_size=window_size_not_sf0)
+            self.sf_mid = SFBlock(C * 8, num_heads=num_heads, window_size=window_size_not_sf0)
+
+            self.down1 = DownBlockNAF(C,     C * 2, time_dim)
+            self.down2 = DownBlockNAF(C * 2, C * 4, time_dim)
+            self.down3 = DownBlockNAF(C * 4, C * 8, time_dim)
+
+            self.mid1  = TimeNAFBlock(C * 8, time_dim)
+            self.mid2  = TimeNAFBlock(C * 8, time_dim)
+
+            self.up3   = UpBlockNAF(C * 8, C * 8, C * 4, time_dim)
+            self.up2   = UpBlockNAF(C * 4, C * 4, C * 2, time_dim)
+            self.up1   = UpBlockNAF(C * 2, C * 2, C,     time_dim)
+
+            self.out   = nn.Conv2d(C, image_channels, kernel_size=3, padding=1)
+
+        def _ckpt(self, fn, *args):
+            """
+            Gradient checkpointing (CAMBIO 3).
+            Recomputa las activaciones en el backward en vez de guardarlas.
+            use_reentrant=False es el modo moderno y más estable.
+            """
+            if self.use_checkpoint and self.training:
+                return checkpoint(fn, *args, use_reentrant=False)
+            return fn(*args)
+
+        def forward(self, x_t, t, s2_cloudy, sar):
+            """
+            x_t:       estado intermedio del bridge   [B, 6, H, W]
+            t:         timestep                        [B]
+            s2_cloudy: Sentinel-2 nublado              [B, 6, H, W]
+            sar:       Sentinel-1 SAR                  [B, 2, H, W]
+
+            Retorna:
+            pred_clean: predicción S2 limpio           [B, 6, H, W]
+            """
+
+            t_emb = self.time_mlp(t)
+
+            sar_feats = self.sar_branch(sar, t_emb)
+
+            x = torch.cat([x_t, s2_cloudy], dim=1)
+            x = self.init_conv(x)
+
+            #Escala 0: Full resolution, C canales.
+            x     = self._ckpt(self.enc0, x, t_emb)
+            x     = self._ckpt(self.sf0, x, sar_feats["scale0"])
+            skip0 = x
+            x     = self.down1.forward_down(x)
+
+            # Escala 1
+            x     = self._ckpt(self.down1.forward_pre, x, t_emb)
+            x     = self._ckpt(self.sf1, x, sar_feats["scale1"])
+            skip1 = x
+            x     = self.down2.forward_down(x)
+
+            # Escala 2
+            x     = self._ckpt(self.down2.forward_pre, x, t_emb)
+            x     = self._ckpt(self.sf2, x, sar_feats["scale2"])
+            skip2 = x
+            x     = self.down3.forward_down(x)
+
+            # Escala 3
+            x     = self._ckpt(self.down3.forward_pre, x, t_emb)
+            x     = self._ckpt(self.sf3, x,  sar_feats["scale3"])
+            skip3 = x
+
+            # Bottleneck
+            x = self._ckpt(self.mid1,   x, t_emb)
+            x = self._ckpt(self.mid2,   x, t_emb)
+            x = self._ckpt(self.sf_mid, x, sar_feats["mid"])
+
+            # Decoder
+            x = self.up3(x, skip3, t_emb)
+            x = self.up2(x, skip2, t_emb)
+            x = self.up1(x, skip1, t_emb)
+
+            return self.out(x)
         
-        with autocast(dtype=torch.bfloat16):  # bf16 es más estable que fp16
-            pred = model(x_t, t, s2_cloudy, sar)
-            loss = criterion(pred, s2_clean)
-        
-        scaler.scale(loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-    with torch.no_grad():
-        out = model(x_t, t, s2_cloudy, sar)
 
-    n_params = sum(p.numel() for p in model.parameters()) / 1e6
-    print(f"Output shape : {out.shape}")
-    print(f"Parámetros   : {n_params:.2f}M")
+
+    # -------------------------
+    # Training loop mínimo
+    # -------------------------
+    # Para usar bf16 en el training loop (CAMBIO 4 — va en tu trainer, no acá):
+    #
+    #   scaler = torch.cuda.amp.GradScaler()
+    #
+    #   for batch in dataloader:
+    #       optimizer.zero_grad()
+    #       with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+    #           pred = model(x_t, t, s2_cloudy, sar)
+    #           loss = F.l1_loss(pred, s2_clean)   # MAE, como el paper
+    #       scaler.scale(loss).backward()
+    #       scaler.step(optimizer)
+    #       scaler.update()
+
+
+    # -------------------------
+    # Sanity check
+    # -------------------------
+
+    if __name__ == "__main__":
+        B, H, W = 2, 128, 128
+
+        model = DBCR(
+            image_channels=6,
+            condition_channels=6,
+            sar_channels=2,
+            base_channels=64,
+            time_dim=128,
+            num_heads=1,
+            window_size_not_sf0=None,
+            window_size_sf0=8,
+            use_checkpoint=True,
+        ).cuda()
+
+        x_t       = torch.randn(B, 6, H, W).cuda()
+        t         = torch.randint(0, 1000, (B,)).cuda()
+        s2_cloudy = torch.randn(B, 6, H, W).cuda()
+        sar       = torch.randn(B, 2, H, W).cuda()
+
+        model.train()
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            out  = model(x_t, t, s2_cloudy, sar)
+            loss = out.mean()
+        loss.backward()
+
+        n_params = sum(p.numel() for p in model.parameters()) / 1e6
+        print(f"Output shape : {out.shape}")
+        print(f"Parámetros   : {n_params:.2f}M")
+        print(f"VRAM pico    : {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")

@@ -58,11 +58,17 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
             pred = inference(model, cloudy_b, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k)
             pred = pred.squeeze(0).clamp(0, 1).cpu()
 
-            stats = get_rgb_stats(cloudy, pred, clear)
+            # stats = get_rgb_stats(cloudy, pred, clear)
+            stats = get_rgb_stats(cloudy, clear)
+
 
             for col, img in enumerate([cloudy, pred, clear]):
                 ax = fig.add_subplot(gs[row, col])
-                ax.imshow(to_rgb(img, stats=stats))
+                # ax.imshow(to_rgb(img, stats=stats))
+                if col == 1:  # pred
+                    ax.imshow(to_rgb(img, stats=None))
+                else:
+                    ax.imshow(to_rgb(img, stats=stats))
                 ax.axis("off")
                 if row == 0:
                     ax.set_title(col_labels[col], fontsize=11, pad=6)

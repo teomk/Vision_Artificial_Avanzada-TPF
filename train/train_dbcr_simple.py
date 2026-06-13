@@ -25,11 +25,11 @@ from dataset_utils import unpack_batch
 
 from dataset import SEN12MSCRDataset
 
-def run(model, batch, optimizer, device, use_sar, T=1000, sigmoid_k=10.0):
+def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
 
     model.train()
 
-    s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, use_sar, device)
+    s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
 
     B = s2_clean.shape[0]
 
