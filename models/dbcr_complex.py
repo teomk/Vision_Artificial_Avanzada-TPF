@@ -465,6 +465,8 @@ class DBCR(nn.Module):
 # -------------------------
 
 if __name__ == "__main__":
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
     B, H, W = 2, 256, 256
     # B, H, W = 2, 128, 128
 
@@ -483,6 +485,22 @@ if __name__ == "__main__":
     s2_cloudy = torch.randn(B, 6, H, W)
     sar       = torch.randn(B, 2, H, W)
 
+
+
+    from torch.amp import autocast, GradScaler
+
+    scaler = GradScaler()
+
+    for batch in dataloader:
+        optimizer.zero_grad()
+        
+        with autocast(dtype=torch.bfloat16):  # bf16 es más estable que fp16
+            pred = model(x_t, t, s2_cloudy, sar)
+            loss = criterion(pred, s2_clean)
+        
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
     with torch.no_grad():
         out = model(x_t, t, s2_cloudy, sar)
 
