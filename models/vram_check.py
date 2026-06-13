@@ -173,20 +173,30 @@ class SFBlock(nn.Module):
         return out.permute(0,1,3,2).reshape(B, C, H, W)
 
     def _attn_window(self, Q, K, V, B, C, H, W):
-        ws  = self.window_size
-        hd  = C // self.num_heads
+        ws     = self.window_size
+        hd     = C // self.num_heads
+
+        # Alinear K y V a la resolución de Q si SAR y optical tienen distinto tamaño
+        if K.shape[-2:] != (H, W):
+            K = F.interpolate(K, size=(H, W), mode="bilinear", align_corners=False)
+            V = F.interpolate(V, size=(H, W), mode="bilinear", align_corners=False)
+
         nH, nW = H // ws, W // ws
 
         def partition(t):
+            # t: [B, C, H, W]
             t = t.reshape(B, C, nH, ws, nW, ws)
-            t = t.permute(0, 2, 4, 1, 3, 5)
-            return t.reshape(B*nH*nW, self.num_heads, hd, ws*ws).permute(0,1,3,2)
+            t = t.permute(0, 2, 4, 3, 5, 1).contiguous()  # [B, nH, nW, ws, ws, C]
+            t = t.reshape(B * nH * nW, ws * ws, self.num_heads, hd)
+            return t.permute(0, 2, 1, 3)                   # [B*nH*nW, heads, tokens, hd]
 
         Q, K, V = partition(Q), partition(K), partition(V)
         out = F.scaled_dot_product_attention(Q, K, V)
-        out = out.permute(0,1,3,2).reshape(B*nH*nW, C, ws, ws)
-        out = out.reshape(B, nH, nW, C, ws, ws)
-        return out.permute(0,3,1,4,2,5).reshape(B, C, H, W)
+        out = out.permute(0, 2, 1, 3).contiguous()
+        out = out.reshape(B * nH * nW, ws, ws, C)
+        out = out.reshape(B, nH, nW, ws, ws, C)
+        out = out.permute(0, 5, 1, 3, 2, 4).contiguous()
+        return out.reshape(B, C, H, W)
 
     def forward(self, optical, sar):
         B, C, H, W = optical.shape
@@ -244,19 +254,34 @@ class SAREncoderBranch(nn.Module):
         self.mid     = TimeNAFBlock(C*8, time_dim)
 
     def forward(self, sar, t_emb):
-        x0           = self.in_conv(sar)
-        x, skip1     = self.down1(x0, t_emb)
-        x, skip2     = self.down2(x,  t_emb)
-        x, skip3     = self.down3(x,  t_emb)
-        mid          = self.mid(x, t_emb)
-        return {"scale0": x0, "scale1": skip1,
-                "scale2": skip2, "scale3": skip3, "mid": mid}
+        # scale0: full resolution, C canales
+        x0 = self.in_conv(sar)              # [B, C, H, W]
+
+        # scale1: H/2, C*2 canales
+        x1, _ = self.down1(x0, t_emb)       # [B, C*2, H/2, W/2]
+
+        # scale2: H/4, C*4 canales
+        x2, _ = self.down2(x1, t_emb)       # [B, C*4, H/4, W/4]
+
+        # scale3: H/8, C*8 canales
+        x3, _ = self.down3(x2, t_emb)       # [B, C*8, H/8, W/8]
+
+        # bottleneck: H/8, C*8 canales
+        mid = self.mid(x3, t_emb)
+
+        return {
+            "scale0": x0,
+            "scale1": x1,
+            "scale2": x2,
+            "scale3": x3,
+            "mid": mid,
+        }
 
 
 class DBCR(nn.Module):
     def __init__(self, image_ch=6, cond_ch=6, sar_ch=2,
                  base_ch=64, time_dim=256, num_heads=1,
-                 use_checkpoint=False, window_size=None):
+                 use_checkpoint=False, window_size=None, window_size_sf0=None):
         super().__init__()
         C = base_ch
         self.use_checkpoint = use_checkpoint
@@ -266,7 +291,8 @@ class DBCR(nn.Module):
         self.init_conv  = nn.Conv2d(image_ch + cond_ch, C, 3, padding=1)
 
         sf = lambda ch: SFBlock(ch, num_heads, window_size)
-        self.sf0    = sf(C)
+        sf0 = lambda ch: SFBlock(ch, num_heads, window_size_sf0)
+        self.sf0    = sf0(C)
         self.down1  = DownBlockNAF(C,   C*2, time_dim)
         self.sf1    = sf(C*2)
         self.down2  = DownBlockNAF(C*2, C*4, time_dim)
@@ -371,7 +397,8 @@ def run_check(args):
                 base_ch=args.base_ch, time_dim=args.time_dim,
                 num_heads=args.num_heads,
                 use_checkpoint=args.checkpoint,
-                window_size=args.window_size,
+                window_size=None,
+                window_size_sf0=args.window_size,
             ).to(device=device, dtype=dtype)
 
         n_params = sum(p.numel() for p in model.parameters()) / 1e6
