@@ -66,6 +66,7 @@ def fit(model, train_loader, lr , device, sar_mode, num_epochs=50, T=1000, sigmo
             num_batches += 1
             avg_loss = epoch_loss / num_batches
             progress_bar.set_postfix({"loss": f"{loss:.6f}", "avg_loss": f"{avg_loss:.6f}"})
+            break
 
         avg_loss = epoch_loss / num_batches
         history["train_loss"].append(avg_loss)
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
  
-    sar_mode     = cfg["sar_mode"]
+    sar_mode    = cfg["sar_mode"]
     cfg_train   = cfg["train"]
     cfg_hf      = cfg["huggingface"]
  
@@ -120,7 +121,7 @@ if __name__ == "__main__":
     # Dataset
     ds_train = SEN12MSCRDataset(split="train", include_s1= sar_mode != "None", include_mask=False)
 
-    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=0)
     
     model = DBCRSimple(
         image_channels=image_channels,
@@ -132,6 +133,20 @@ if __name__ == "__main__":
 
     if load_filename is not None:
         checkpoint = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
+        if sar_mode == "Concat":
+            old_weight = checkpoint["condition_encoder.in_conv.weight"]  # [64, 6, 3, 3]
+            new_weight = torch.zeros(
+                old_weight.shape[0],       # 64
+                8,                          # 8 canales
+                old_weight.shape[2],       # 3
+                old_weight.shape[3],       # 3
+                device=old_weight.device,
+                dtype=old_weight.dtype,
+            )
+            new_weight[:, :6, :, :] = old_weight  # canales ópticos
+            new_weight[:, 6:, :, :] = 0           # SAR arranca en cero
+            checkpoint["condition_encoder.in_conv.weight"] = new_weight
+
         model.load_state_dict(checkpoint, strict=False)
         print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
 
@@ -144,64 +159,64 @@ if __name__ == "__main__":
         assert trainable_params == controlnet_params, f"Error: Se esperaban {controlnet_params} parámetros entrenables, pero se encontraron {trainable_params}."
         print(f"Parámetros entrenables (ControlNet): {trainable_params:,}")
  
-    # parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    # print(f"Parámetros entrenables: {parameters:,}")
+    parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Parámetros entrenables: {parameters:,}")
  
-    # # Entrenar
-    # history = fit(
-    #     model=model, train_loader=loader_train,
-    #     lr=lr, device=device, sar_mode=sar_mode,
-    #     num_epochs=num_epochs, T=T, sigmoid_k=sigmoid_k
-    # )
+    # Entrenar
+    history = fit(
+        model=model, train_loader=loader_train,
+        lr=lr, device=device, sar_mode=sar_mode,
+        num_epochs=num_epochs, T=T, sigmoid_k=sigmoid_k
+    )
  
-    # # Subir a HuggingFace
-    # upload_model(
-    #     model_state_dict=model.state_dict(),
-    #     repo_id=repo_id,
-    #     filename=save_filename,
-    # )
+    # Subir a HuggingFace
+    upload_model(
+        model_state_dict=model.state_dict(),
+        repo_id=repo_id,
+        filename=save_filename,
+    )
  
-    # # Registrar versión
-    # register_version(
-    #     repo_id=repo_id,
-    #     version=version,
-    #     filename=save_filename,
-    #     base_model=save_filename,
-    #     use_sar=sar_mode,
-    #     phase1_info={
-    #         "num_epochs": num_epochs, "lr": lr,
-    #         "T": T, "sigmoid_k": sigmoid_k,
-    #         "batch_size": batch_size, "num_weights": parameters, "sar_mode": sar_mode
-    #     },
-    #     phase2_info={
-    #         "num_epochs": 0, "lr": 0,
-    #         "T": 0, "sigmoid_k": 0,
-    #         "batch_size": 0, "num_weights": 0
-    #     },
-    #     notes=notes,
-    # )
+    # Registrar versión
+    register_version(
+        repo_id=repo_id,
+        version=version,
+        filename=save_filename,
+        base_model=save_filename,
+        use_sar=sar_mode,
+        phase1_info={
+            "num_epochs": num_epochs, "lr": lr,
+            "T": T, "sigmoid_k": sigmoid_k,
+            "batch_size": batch_size, "num_weights": parameters, "sar_mode": sar_mode
+        },
+        phase2_info={
+            "num_epochs": 0, "lr": 0,
+            "T": 0, "sigmoid_k": 0,
+            "batch_size": 0, "num_weights": 0
+        },
+        notes=notes,
+    )
 
-    # history_data = {
-    # "train_loss": history["train_loss"],
-    # "config": {
-    #     "num_epochs": num_epochs,
-    #     "lr": lr,
-    #     "batch_size": batch_size,
-    #     "T": T,
-    #     "sigmoid_k": sigmoid_k,
-    #     "use_sar": sar_mode,
-    #     "num_parameters": parameters,
-    #     }
-    # }
+    history_data = {
+    "train_loss": history["train_loss"],
+    "config": {
+        "num_epochs": num_epochs,
+        "lr": lr,
+        "batch_size": batch_size,
+        "T": T,
+        "sigmoid_k": sigmoid_k,
+        "use_sar": sar_mode,
+        "num_parameters": parameters,
+        }
+    }
 
-    # history_dir = ROOT / "training_history"
-    # history_dir.mkdir(parents=True, exist_ok=True)
+    history_dir = ROOT / "training_history"
+    history_dir.mkdir(parents=True, exist_ok=True)
 
-    # history_filename = save_filename.replace(".pth", "_history.yaml")
-    # history_path = history_dir / history_filename
+    history_filename = save_filename.replace(".pth", "_history.yaml")
+    history_path = history_dir / history_filename
 
-    # with open(history_path, "w") as f:
-    #     yaml.safe_dump(history_data, f, sort_keys=False)
+    with open(history_path, "w") as f:
+        yaml.safe_dump(history_data, f, sort_keys=False)
 
-    # print(f"History guardado en: {history_path}")
+    print(f"History guardado en: {history_path}")
  
