@@ -65,9 +65,9 @@ models:
       filename: dbcr_concat_v1.pth
       eval:
         split: test
-        date: '2026-06-13'
+        date: '2026-06-14'
         steps: 10
-        mae: 0.034376
-        psnr: 26.7608
-        ssim: 0.791971
-        sam: 10.7257
+        mae: 0.034334
+        psnr: 26.7763
+        ssim: 0.792061
+        sam: 10.7145

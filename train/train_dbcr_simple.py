@@ -152,7 +152,6 @@ if __name__ == "__main__":
             new_weight[:, 6:, :, :] = 0           # SAR arranca en cero
             checkpoint["condition_encoder.in_conv.weight"] = new_weight
 
-            # i want to print how many parameters im initializing with pretrained weights vs how many new parameters are being added
             pretrained_params = old_weight.numel()
             new_params = new_weight.numel() - pretrained_params
             print(f"Inicializando {pretrained_params:,} parámetros con pesos preentrenados y {new_params:,} parámetros nuevos (SAR).")
@@ -163,7 +162,6 @@ if __name__ == "__main__":
     if sar_mode == "ControlNet":
         model.freeze_unet()
         print("UNet congelada. Solo se entrenará el ControlNet.")
-        #chequear que efectivamente solo el control net tiene parámetros entrenables
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         controlnet_params = sum(p.numel() for p in model.control_net.parameters() if p.requires_grad)
         assert trainable_params == controlnet_params, f"Error: Se esperaban {controlnet_params} parámetros entrenables, pero se encontraron {trainable_params}."
