@@ -35,3 +35,19 @@ python3 -m venv vision
 source vision/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements_linux_gpu.txt
+
+
+
+Resumen de test dbcr en vram L4 24 gb:
+======================================================================
+  RESUMEN
+======================================================================
+  Resolución: 256x256 | base_channels=64 | time_dim=128
+  Límite VRAM considerado: 24.0 GB
+
+  Config                                        Params (M)  Batch máx
+  --------------------------------------------- ---------- ----------
+  Window en sf0 (ws=8) + checkpoint ON               25.63          4
+  Window en sf0 (ws=8) + checkpoint OFF              25.63          2
+  Sin window en sf0 (global) + checkpoint ON         25.63          0
+  Sin window en sf0 (global) + checkpoint OFF        25.63          0
