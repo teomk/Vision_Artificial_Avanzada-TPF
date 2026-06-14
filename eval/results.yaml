@@ -71,3 +71,14 @@ models:
         psnr: 26.7763
         ssim: 0.792061
         sam: 10.7145
+  dbcr_controlnet:
+    dbcr_controlnet_v1:
+      filename: dbcr_controlnet_v1.pth
+      eval:
+        split: test
+        date: '2026-06-14'
+        steps: 10
+        mae: 0.032003
+        psnr: 27.2809
+        ssim: 0.78016
+        sam: 11.0525
