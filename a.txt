@@ -1,0 +1,37 @@
+EN la compu de la facu borrar esto:
+
+Get-ChildItem -Path "data\test" -Recurse -Filter "*ROIs1868_summer*146_p202*.tif" |
+  Format-List FullName, Length
+
+Get-ChildItem -Path "data\test" -Recurse -Filter "*ROIs1868_summer*146_p202*.tif" |
+  Remove-Item -Force
+
+
+Get-ChildItem -Path "data\test" -Recurse -Filter "*ROIs1868_summer*146_p202*.tif" |
+  Format-List FullName, Length
+
+
+Para la VM:
+cd /mnt/data/repo/Vision_Artificial_Avanzada-TPF
+
+find data/test -type f -name "*ROIs1868_summer*146_p202*.tif" -print
+
+find data/test -type f -name "*ROIs1868_summer*146_p202*.tif" -delete
+
+find data/test -type f -name "*ROIs1868_summer*146_p202*.tif" -print
+
+
+envs: 
+
+
+conda:
+
+conda env create -f environment_linux_gpu.yml
+conda activate vision
+
+vevn:
+
+python3 -m venv vision
+source vision/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements_linux_gpu.txt

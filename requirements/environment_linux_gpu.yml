@@ -1,0 +1,24 @@
+name: vision
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+  # GPU stack. If your Linux driver only supports another CUDA runtime,
+  # adjust pytorch-cuda accordingly.
+  - pytorch=2.7.0
+  - torchvision=0.22.1
+  - pytorch-cuda=12.6
+  - pip:
+      # Core project dependencies found in dataset/, eval/, models/, tools/, train/, utils/, visualize/
+      - numpy==2.4.2
+      - matplotlib==3.10.8
+      - rasterio==1.4.4
+      - tqdm==4.67.3
+      - PyYAML==6.0.3
+      - diffusers==0.38.0
+      - huggingface_hub==1.18.0

@@ -1,0 +1,12 @@
+--index-url https://download.pytorch.org/whl/cu126
+--extra-index-url https://pypi.org/simple
+
+torch==2.7.0
+torchvision==0.22.1
+numpy==2.4.2
+matplotlib==3.10.8
+rasterio==1.4.4
+tqdm==4.67.3
+PyYAML==6.0.3
+diffusers==0.38.0
+huggingface_hub==1.18.0

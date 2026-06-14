@@ -1,4 +1,5 @@
 import torch
+from tqdm import tqdm
 
 def sigmoid_scheduler(T, sigmoid_k, t, device):
     tau   = torch.clamp(t.float() / T, 0.0, 1.0)
@@ -12,7 +13,7 @@ def make_bridge_sample(s2_clean, s2_cloudy, t, T, sigmoid_k, device):
     alpha_t = sigmoid_scheduler(T, sigmoid_k, t, device)
     return (1.0 - alpha_t) * s2_clean + alpha_t * s2_cloudy
 
-def inference(model, cloudy_b, condition, device, T=1000, steps=10, sar=None, sigmoid_k=10.0):
+def inference(model, cloudy_b, condition, device, T=1000, steps=10, sar=None, sigmoid_k=10.0, show_progress: bool = False):
     """
     cloudy_b:  [1, 6, H, W] — solo S2, usado para el bridge (x_t)
     condition: [1, 6, H, W] o [1, 8, H, W] — lo que recibe el modelo como s2_cloudy
@@ -21,7 +22,8 @@ def inference(model, cloudy_b, condition, device, T=1000, steps=10, sar=None, si
     x_t = cloudy_b.clone()
     timesteps = torch.linspace(T, 1, steps).long().to(device)
     with torch.no_grad():
-        for t_val in timesteps:
+        iter_timesteps = tqdm(timesteps, desc="Infer steps", unit="step") if show_progress else timesteps
+        for t_val in iter_timesteps:
             B = x_t.shape[0]
             t = t_val.repeat(B).to(device)
             with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type=="cuda"):

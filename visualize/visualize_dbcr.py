@@ -3,6 +3,7 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 import torch
 import sys
+from tqdm import tqdm
 import argparse
 import yaml
 from pathlib import Path
@@ -20,18 +21,25 @@ from dataset import SEN12MSCRDataset
 from dbcr_simple import DBCRSimple
 from hf_utils import download_model
 from dbcr_simple_utils import inference
-from visualize_utils import to_rgb, get_rgb_stats
+from visualize_utils import to_rgb, get_rgb_stats, to_sar
 
 def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=1000, steps = 10, sigmoid_k=10.0, save_path=None, seed=17):
     model.eval()
     np.random.seed(seed)
     indices = np.random.choice(len(dataset), n_samples, replace=False)
-    col_labels = ["Cloudy", "Prediction", "Ground Truth"]
-    fig = plt.figure(figsize=(4 * 3, 4 * n_samples))
-    gs  = gridspec.GridSpec(n_samples, 3, figure=fig, hspace=0.05, wspace=0.05)
+    has_sar = sar_mode in ("Concat", "ControlNet")
+    if has_sar:
+        col_labels = ["Cloudy", "SAR", "Prediction", "Ground Truth"]
+        n_cols = 4
+    else:
+        col_labels = ["Cloudy", "Prediction", "Ground Truth"]
+        n_cols = 3
+
+    fig = plt.figure(figsize=(4 * n_cols, 4 * n_samples))
+    gs  = gridspec.GridSpec(n_samples, n_cols, figure=fig, hspace=0.05, wspace=0.05)
  
     with torch.no_grad():
-        for row, idx in enumerate(indices):
+        for row, idx in enumerate(tqdm(indices, desc="Samples", unit="sample")):
             if sar_mode == "None":
                 cloudy, clear = dataset[idx]
                 cloudy_b  = cloudy.unsqueeze(0).float().to(device)
@@ -55,19 +63,24 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
             else:
                 raise ValueError(f"sar_mode desconocido: '{sar_mode}'")
  
-            pred = inference(model, cloudy_b, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k)
+            pred = inference(model, cloudy_b, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k, show_progress=(steps>1))
             pred = pred.squeeze(0).clamp(0, 1).cpu()
 
-            # stats = get_rgb_stats(cloudy, pred, clear)
+            # compute shared RGB stats from cloudy and clear (exclude SAR)
             stats = get_rgb_stats(cloudy, clear)
 
+            if has_sar:
+                imgs = [cloudy, to_sar(s1_b.squeeze(0)), pred, clear]
+            else:
+                imgs = [cloudy, pred, clear]
 
-            for col, img in enumerate([cloudy, pred, clear]):
+            for col, img in enumerate(imgs):
                 ax = fig.add_subplot(gs[row, col])
-                # ax.imshow(to_rgb(img, stats=stats))
-                if col == 1:  # pred
-                    ax.imshow(to_rgb(img, stats=None))
+                if has_sar and col == 1:
+                    # SAR visualization (single channel image)
+                    ax.imshow(img, cmap="gray")
                 else:
+                    # For optical RGB images, apply the same stats so brightness matches
                     ax.imshow(to_rgb(img, stats=stats))
                 ax.axis("off")
                 if row == 0:
@@ -83,6 +96,8 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
 
 if __name__ == "__main__":
     # python visualize/visualize_dbcr.py --config configs/dbcr_no_sar.yaml
+    # python visualize/visualize_dbcr.py --config configs/dbcr_concat.yaml
+    # python visualize/visualize_dbcr.py --config configs/dbcr_controlnet.yaml
     parser = argparse.ArgumentParser(description="Visualizar predicciones DBCR")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
     parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia iterativa (default: 10)")
