@@ -18,6 +18,7 @@ models:
         psnr: 25.0242
         ssim: 0.806932
         sam: 15.7648
+  # dbcr no sar 15 epocas
   dbcr_no_sar:
     dbcr_no_sar_naf_v2:
       filename: dbcr_no_sar_naf_v2.pth
@@ -29,6 +30,7 @@ models:
         psnr: 27.5822
         ssim: 0.80682
         sam: 12.7846
+     # dbcr no sar 30 epocas
     dbcr_no_sar_naf_v3:
       filename: dbcr_no_sar_naf_v3.pth
       eval:
@@ -82,6 +84,7 @@ models:
         ssim: 0.801379
         sam: 9.8139
   dbcr_controlnet:
+  # V1 estaba mal
     dbcr_controlnet_v1:
       filename: dbcr_controlnet_v1.pth
       eval:
@@ -92,6 +95,7 @@ models:
         psnr: 27.2809
         ssim: 0.78016
         sam: 11.0525
+    # V2 15 epocas
     dbcr_controlnet_v2:
       filename: dbcr_controlnet_v2.pth
       eval:
@@ -102,6 +106,7 @@ models:
         psnr: 27.2593
         ssim: 0.779374
         sam: 11.46
+    # V3 30 epocas
     dbcr_controlnet_v3:
       filename: dbcr_controlnet_v3.pth
       eval:
@@ -112,6 +117,8 @@ models:
         psnr: 26.9178
         ssim: 0.781432
         sam: 10.9363
+
+  #dbcr complex 15 epocas
   dbcr_complex_controlnet:
     dbcr_complex_v1:
       filename: dbcr_complex_v1.pth
@@ -123,13 +130,3 @@ models:
         psnr: 26.146
         ssim: 0.786246
         sam: 12.0536
-    dbcr_complex_v2:
-      filename: dbcr_complex_v2.pth
-      eval:
-        split: test
-        date: '2026-06-16'
-        steps: 10
-        mae: 0.036751
-        psnr: 25.6159
-        ssim: 0.770984
-        sam: 12.7064

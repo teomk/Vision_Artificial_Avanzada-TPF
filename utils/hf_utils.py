@@ -7,6 +7,7 @@ Usado por train_lama.py, eval_lama.py, adapt_lama.py, etc.
 
 from __future__ import annotations
 
+import io
 import re
 import sys
 import tempfile
@@ -48,7 +49,18 @@ def download_model(
     """
     print(f"Descargando '{filename}' desde '{repo_id}'...")
     path = hf_hub_download(repo_id=repo_id, filename=filename)
-    checkpoint = torch.load(path, map_location=map_location)
+    try:
+        checkpoint = torch.load(path, map_location=map_location, weights_only=False)
+    except TypeError:
+        checkpoint = torch.load(path, map_location=map_location)
+
+    if isinstance(checkpoint, io.BytesIO):
+        checkpoint.seek(0)
+        try:
+            checkpoint = torch.load(checkpoint, map_location=map_location, weights_only=False)
+        except TypeError:
+            checkpoint = torch.load(checkpoint, map_location=map_location)
+
     print("Descarga OK.")
     return checkpoint
 
@@ -189,7 +201,15 @@ def upload_model(
         tmp_path = tmp.name
 
     try:
-        torch.save(model_state_dict, tmp_path)
+        if isinstance(model_state_dict, io.BytesIO):
+            model_state_dict.seek(0)
+            tmp.write(model_state_dict.read())
+            tmp.flush()
+        elif isinstance(model_state_dict, (bytes, bytearray)):
+            tmp.write(model_state_dict)
+            tmp.flush()
+        else:
+            torch.save(model_state_dict, tmp_path)
         print(f"Subiendo '{filename}' a '{repo_id}'...")
         upload_file(
             path_or_fileobj=tmp_path,
@@ -237,13 +257,13 @@ def _upload_versions_yaml(repo_id: str, data: dict) -> None:
         Path(tmp_path).unlink(missing_ok=True)
 
 
-def _model_key(model_name, sar_mode: str) -> str:
-    """Devuelve la clave de primer nivel para el modelo en versions.yaml."""
-    # if use_sar:
-    #     model_name += "_sar"
-    # else:
-    #     model_name += "_no_sar"
-    return model_name + "_" + sar_mode.lower()
+# def _model_key(model_name, sar_mode: str) -> str:
+#     """Devuelve la clave de primer nivel para el modelo en versions.yaml."""
+#     # if use_sar:
+#     #     model_name += "_sar"
+#     # else:
+#     #     model_name += "_no_sar"
+#     return model_name + "_" + sar_mode.lower()
 
 
 def register_version(
@@ -251,6 +271,7 @@ def register_version(
     version: int,
     filename: str,
     *,
+    model_name: str,
     base_model: str,
     sar_mode: str,
     phase1_info: dict,
@@ -298,8 +319,9 @@ def register_version(
     if "models" not in data:
         data["models"] = {}
 
-    model_name = base_model.rsplit("_")[0]  # e.g. "lama_no_sar_pretrained_v1.pth" → "lama"
-    mkey = _model_key(model_name, sar_mode)
+    model_name = model_name.lower()
+    # mkey = _model_key(model_name, sar_mode)
+    mkey = model_name
     if mkey not in data["models"]:
         data["models"][mkey] = {}
 

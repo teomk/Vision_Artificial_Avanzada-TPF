@@ -145,7 +145,12 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | SAR: {sar_mode} | split: {args.split} | steps: {args.steps}")
 
-    checkpoint = download_model(repo_id=repo_id, filename=save_filename, map_location=device)
+    loaded = download_model(repo_id=repo_id, filename=save_filename, map_location=device)
+    checkpoint = (
+       loaded["model_state_dict"]
+       if isinstance(loaded, dict) and "model_state_dict" in loaded
+       else loaded
+   )
 
     image_channels     = 6
     condition_channels = 8 if sar_mode == "Concat" else 6

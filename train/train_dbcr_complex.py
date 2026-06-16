@@ -105,6 +105,7 @@ def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
             if device.type == "cuda":
                 postfix["VRAM"] = f"{torch.cuda.max_memory_allocated() / 1e9:.2f}GB"
             progress_bar.set_postfix(postfix)
+            # break
 
         avg_loss = epoch_loss / num_batches
         history["train_loss"].append(avg_loss)
@@ -233,7 +234,7 @@ if __name__ == "__main__":
     print()
 
     # Dataset
-    ds_train = SEN12MSCRDataset(split="train", include_s1=(sar_mode != "None"), include_mask=False)
+    ds_train = SEN12MSCRDataset(split="train", include_s1=(sar_mode != "None"), include_mask=False, total_bands=(image_channels == 13))
 
     loader_train = DataLoader(
         ds_train,
@@ -310,6 +311,7 @@ if __name__ == "__main__":
 
     # --- Subir checkpoint COMPLETO a HuggingFace (nada se guarda en disco local) ---
     final_checkpoint = build_checkpoint(model, optimizer, scheduler, last_epoch, history)
+    torch.save(final_checkpoint, "saved_models/temp_checkpoint.pth")
     upload_checkpoint_to_hf(final_checkpoint, repo_id=repo_id, filename=save_filename)
     print(f"Checkpoint completo subido a HF: {repo_id}/{save_filename}")
     print(f"Épocas totales acumuladas: {total_epochs_completadas}")
@@ -319,6 +321,7 @@ if __name__ == "__main__":
         repo_id=repo_id,
         version=version,
         filename=save_filename,
+        model_name="dbcr_complex",
         base_model=save_filename,
         sar_mode=sar_mode,
         phase1_info={

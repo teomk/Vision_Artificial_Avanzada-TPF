@@ -23,6 +23,8 @@ S1_MEAN_DEFAULT = np.array([-8.999908447265625, -14.78221321105957], dtype=np.fl
 S1_STD_DEFAULT  = np.array([2.413282871246338, 2.3029115200042725], dtype=np.float32)
 BANDS = [2, 3, 4, 8, 12, 13]
 
+BANDS_TOTAL = [1,2,3,4,5,6,7,8,9,10,11,12,13]
+
 
 # ─────────────────────────────────────────
 # HELPERS DE PARSING
@@ -148,6 +150,7 @@ class SEN12MSCRDataset(Dataset):
         s1_std:     Optional[np.ndarray] = S1_STD_DEFAULT,
         base_dir:   Path = Path("."),
         include_mask: bool = True,
+        total_bands = False
     ):
         self.split      = split
         self.include_s1 = include_s1
@@ -155,6 +158,7 @@ class SEN12MSCRDataset(Dataset):
         self.transform  = transform
         self.s1_mean    = s1_mean
         self.s1_std     = s1_std
+        self.total_bands = total_bands
 
         root          = base_dir / "data" / split
         s1_folder     = root / "south_america_s1"
@@ -180,15 +184,17 @@ class SEN12MSCRDataset(Dataset):
     def __getitem__(self, idx: int):
         triple = self.triples[idx]
 
+        bands_to_use = BANDS_TOTAL if self.total_bands else BANDS
+
         # ── Leer imágenes ──────────────────────────────────────────────
         with rasterio.open(triple["s1"]) as src:
             s1_raw = src.read().astype(np.float32)          # [C_s1, H, W]
 
         with rasterio.open(triple["s2"]) as src:
-            s2_raw = src.read(indexes=BANDS).astype(np.float32)          # [6, H, W]
+            s2_raw = src.read(indexes=bands_to_use).astype(np.float32)          # [6, H, W] or [13, H, W]
 
         with rasterio.open(triple["cloudy"]) as src:
-            cloudy_raw = src.read(indexes=BANDS).astype(np.float32)  # [6, H, W]
+            cloudy_raw = src.read(indexes=bands_to_use).astype(np.float32)  # [6, H, W] or [13, H, W]
 
         with rasterio.open(triple["mask"]) as src:
             mask_raw = src.read().astype(np.float32)        # [1, H, W]
@@ -299,7 +305,7 @@ if __name__ == "__main__":
     print("S1_STD  =", std.tolist())
 
     # --- Con S1 ---
-    ds_with_s1 = SEN12MSCRDataset(split="test", include_s1=True)
+    ds_with_s1 = SEN12MSCRDataset(split="test", include_s1=True, bands_total=True)
     s1, cloudy, mask, clear = ds_with_s1[0]
     print(f"\nCon S1:")
     print(f"  s1:       {s1.shape}    dtype={s1.dtype}    min={s1.min():.3f}  max={s1.max():.3f}")
@@ -308,7 +314,7 @@ if __name__ == "__main__":
     print(f"  s2_clear: {clear.shape}  dtype={clear.dtype}  min={clear.min():.3f}  max={clear.max():.3f}")
 
     # --- Sin S1 ---
-    ds_no_s1 = SEN12MSCRDataset(split="test", include_s1=False)
+    ds_no_s1 = SEN12MSCRDataset(split="test", include_s1=False, bands_total=True)
     cloudy, mask, clear = ds_no_s1[0]
     print(f"\nSin S1:")
     print(f"  cloudy:   {cloudy.shape}")

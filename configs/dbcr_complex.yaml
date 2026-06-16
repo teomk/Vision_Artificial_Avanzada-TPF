@@ -13,8 +13,8 @@ train:
   resume_filename: "None"
 
 model_args:
-  image_channels: 6
-  condition_channels: 6
+  image_channels: 13
+  condition_channels: 13
   sar_channels: 2
   base_channels: 64
   time_dim: 128
@@ -27,6 +27,6 @@ model_args:
 
 huggingface:
   repo_id: "LucioLuque/lama"
-  save_filename: "dbcr_complex_v1.pth"
-  version: 1
-  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8, checkpoint ON, sin encoder_4."
+  save_filename: "dbcr_complex_v2.pth"
+  version: 2
+  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8, checkpoint ON, sin encoder_4. CON 13 BANDAS"
