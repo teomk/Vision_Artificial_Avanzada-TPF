@@ -111,8 +111,7 @@ class TimeNAFBlock(nn.Module):
 
         return x
 
-
-class SFBlock(nn.Module):
+class SARFBlock(nn.Module):
     """
     SAR Fusion Block con window attention.
 
@@ -214,66 +213,6 @@ class SFBlock(nn.Module):
         x = x + self.mlp(self.norm_mlp(x))
         return x
 
-
-# -------------------------
-# Down / Up Blocks
-# -------------------------
-
-# class DownBlockNAF(nn.Module):
-#     def __init__(self, in_channels, out_channels, time_dim):
-#         super().__init__()
-#         # self.proj = (
-#         #     nn.Conv2d(in_channels, out_channels, kernel_size=1)
-#         #     if in_channels != out_channels else nn.Identity()
-#         # )
-#         self.naf  = TimeNAFBlock(out_channels, time_dim)
-#         self.down = nn.Conv2d(out_channels, out_channels, kernel_size=4, stride=2, padding=1)
-
-#     def forward_pre(self, x, t_emb):
-#         """NAFBlock sin downsampling — para insertar SFBlock después"""
-#         x = self.proj(x)
-#         x = self.naf(x, t_emb)
-#         return x
-
-#     def forward_down(self, x):
-#         """Solo el downsampling"""
-#         return self.down(x)
-
-#     def forward(self, x, t_emb):
-#         """Comportamiento original por si se necesita en otro contexto"""
-#         x = self.forward_pre(x, t_emb)
-#         return self.forward_down(x)
-
-# class DownBlockNAF(nn.Module):
-#     def __init__(self, in_channels, out_channels, time_dim):
-#         super().__init__()
-#         # NAF opera en in_channels (mismo canal que entra)
-#         self.naf = TimeNAFBlock(in_channels, time_dim)
-#         # El downsample HACE el cambio de canales: in_channels -> out_channels
-#         self.down = nn.Conv2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1)
-
-#     def forward_pre(self, x, t_emb):
-#         """NAF en in_channels, sin cambio de canales ni downsampling"""
-#         return self.naf(x, t_emb)
-
-#     def forward_down(self, x):
-#         """Downsample + cambio de canales in_channels -> out_channels"""
-#         return self.down(x)
-
-#     def forward(self, x, t_emb):
-#         x = self.forward_pre(x, t_emb)
-#         return self.forward_down(x)
-
-class DownBlock(nn.Module):
-    """Solo cambia canales + reduce resolución."""
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.down = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1)
-
-    def forward(self, x):
-        return self.down(x)
-
-
 class UpBlockNAF(nn.Module):
     def __init__(self, in_channels, skip_channels, out_channels, time_dim):
         super().__init__()
@@ -295,48 +234,57 @@ class UpBlockNAF(nn.Module):
         x = self.naf(x, t_emb)
         return x
 
-
 # -------------------------
 # SAR Encoder Branch
 # -------------------------
 
 class SAREncoderBranch(nn.Module):
-    def __init__(self, sar_channels=2, base_channels=64, time_dim=256):
+    def __init__(self, sar_channels=2, base_channels=64, time_dim=128, include_encoder_4=False):
         super().__init__()
         C = base_channels
+        self.has_enc4 = include_encoder_4
+
         self.in_conv = nn.Conv2d(sar_channels, C, kernel_size=3, padding=1)
 
-        self.sar_enc0 = TimeNAFBlock(C,     time_dim)
-        self.down1    = DownBlock(C,       C * 2)
+        self.sar_enc1 = TimeNAFBlock(C,     time_dim)
+        self.down1    = nn.Conv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
 
-        self.sar_enc1 = TimeNAFBlock(C * 2, time_dim)
-        self.down2    = DownBlock(C * 2,   C * 4)
+        self.sar_enc2 = TimeNAFBlock(C * 2, time_dim)
+        self.down2    = nn.Conv2d(C * 2, C * 4, kernel_size=3, stride=2, padding=1)
 
-        self.sar_enc2 = TimeNAFBlock(C * 4, time_dim)
-        self.down3    = DownBlock(C * 4,   C * 8)
+        self.sar_enc3 = TimeNAFBlock(C * 4, time_dim)
+        self.down3    = nn.Conv2d(C * 4, C * 8, kernel_size=3, stride=2, padding=1)
 
-        self.sar_enc3 = TimeNAFBlock(C * 8, time_dim)
-        self.mid      = TimeNAFBlock(C * 8, time_dim)
+        if include_encoder_4:
+            self.sar_enc4 = TimeNAFBlock(C * 8, time_dim)
+            self.down4    = nn.Conv2d(C * 8, C * 16, kernel_size=3, stride=2, padding=1)
+            self.mid      = TimeNAFBlock(C * 16, time_dim)
+        else:
+            self.mid      = TimeNAFBlock(C * 8, time_dim)
 
     def forward(self, sar, t_emb):
-        x0 = self.in_conv(sar)
-        x0 = self.sar_enc0(x0, t_emb)
-
-        x1 = self.down1(x0)
+        x1 = self.in_conv(sar)
         x1 = self.sar_enc1(x1, t_emb)
 
-        x2 = self.down2(x1)
+        x2 = self.down1(x1)
         x2 = self.sar_enc2(x2, t_emb)
 
-        x3 = self.down3(x2)
+        x3 = self.down2(x2)
         x3 = self.sar_enc3(x3, t_emb)
 
-        mid = self.mid(x3, t_emb)
+        x4 = self.down3(x3)
+        x_mid = x4
+
+        if self.has_enc4:
+            x4 = self.sar_enc4(x4, t_emb)
+            x_mid = self.down4(x4)
+    
+        mid = self.mid(x_mid, t_emb)
         return {
-            "scale0": x0,
             "scale1": x1,
             "scale2": x2,
             "scale3": x3,
+            "scale4": x4,
             "mid":    mid,
         }
 
@@ -344,6 +292,20 @@ class SAREncoderBranch(nn.Module):
 # -------------------------
 # DBCR
 # -------------------------
+
+class DownNAFSARF(nn.Module):
+    def __init__(self, in_channels, down_channels, time_dim, num_heads=1, window_size=None):
+        super().__init__()
+        self.naf = TimeNAFBlock(in_channels, time_dim)
+        self.sf  = SARFBlock(in_channels, num_heads=num_heads, window_size=window_size)
+        self.down = nn.Conv2d(in_channels, down_channels, kernel_size=3, stride=2, padding=1)
+
+    def forward(self, x, t_emb, sar_feat):
+        x = self.naf(x, t_emb)
+        x = self.sf(x, sar_feat)
+        skip = x
+        x = self.down(x)
+        return x, skip
 
 class DBCR(nn.Module):
     """
@@ -385,47 +347,36 @@ class DBCR(nn.Module):
         window_size_not_sf0=None,        # sf1/sf2/sf3/sf_mid global
         window_size_sf0=8,       # solo sf0 con window
         use_checkpoint=True, # CAMBIO 3: gradient checkpointing
+        include_encoder_4=False, # Si True, agrega un bloque extra sf4 con resolución 16x16 (y un up4 correspondiente)
     ):
         super().__init__()
 
         C = base_channels
+        self.has_enc4 = include_encoder_4
         self.use_checkpoint = use_checkpoint
 
         self.time_mlp = TimeMLP(time_dim)
 
-        self.sar_branch = SAREncoderBranch(
-            sar_channels=sar_channels,
-            base_channels=C,
-            time_dim=time_dim,
-        )
+        self.sar_branch = SAREncoderBranch(sar_channels=sar_channels, base_channels=C, time_dim=time_dim, include_encoder_4=include_encoder_4)
 
         in_ch = image_channels + condition_channels
         self.init_conv = nn.Conv2d(in_ch, C, kernel_size=3, padding=1)
 
-        self.enc0 = TimeNAFBlock(C, time_dim)
-        self.down0to1 = DownBlock(C, C * 2)
+        self.enc1 = DownNAFSARF(C, C*2, time_dim, num_heads=num_heads, window_size=window_size_sf0)
+        self.enc2 = DownNAFSARF(C*2, C*4, time_dim, num_heads=num_heads, window_size=window_size_not_sf0)
+        self.enc3 = DownNAFSARF(C*4, C*8, time_dim, num_heads=num_heads, window_size=window_size_not_sf0)
 
-        self.enc1 = TimeNAFBlock(C*2, time_dim)      # escala 1, C*2 canales
-        self.down1to2 = DownBlock(C*2, C*4)
+        mid_channels = C * 8
+        if include_encoder_4:
+            self.enc4 = DownNAFSARF(C*8, C*16, time_dim, num_heads=num_heads, window_size=window_size_not_sf0)
+            mid_channels = C * 16
 
-        self.enc2 = TimeNAFBlock(C*4, time_dim)      # escala 2, C*4 canales
-        self.down2to3 = DownBlock(C*4, C*8)
+        self.mid1  = TimeNAFBlock(mid_channels, time_dim)
+        self.sf_mid = SARFBlock(mid_channels, num_heads=num_heads, window_size=window_size_not_sf0)
+        self.mid2  = TimeNAFBlock(mid_channels, time_dim)
 
-        self.enc3 = TimeNAFBlock(C*8, time_dim)      # escala 3, C*8 canales
-
-        # SFBlocks con window attention (CAMBIO 1 + 2)
-        self.sf0    = SFBlock(C,     num_heads=num_heads, window_size=window_size_sf0)
-        self.sf1    = SFBlock(C * 2, num_heads=num_heads, window_size=window_size_not_sf0)
-        self.sf2    = SFBlock(C * 4, num_heads=num_heads, window_size=window_size_not_sf0)
-        self.sf3    = SFBlock(C * 8, num_heads=num_heads, window_size=window_size_not_sf0)
-        self.sf_mid = SFBlock(C * 8, num_heads=num_heads, window_size=window_size_not_sf0)
-
-        # self.down1 = DownBlock(C,     C * 2, time_dim)
-        # self.down2 = DownBlock(C * 2, C * 4, time_dim)
-        # self.down3 = DownBlock(C * 4, C * 8, time_dim)
-
-        self.mid1  = TimeNAFBlock(C * 8, time_dim)
-        self.mid2  = TimeNAFBlock(C * 8, time_dim)
+        if include_encoder_4:
+            self.up4   = UpBlockNAF(C * 16, C * 8, C * 8, time_dim)
 
         self.up3   = UpBlockNAF(C * 8, C * 4, C * 4, time_dim)
         self.up2   = UpBlockNAF(C * 4, C * 2, C * 2, time_dim)
@@ -461,42 +412,28 @@ class DBCR(nn.Module):
         x = torch.cat([x_t, s2_cloudy], dim=1)
         x = self.init_conv(x)
 
-        #Escala 0: Full resolution, C canales.
-        x     = self._ckpt(self.enc0, x, t_emb)
-        x     = self._ckpt(self.sf0, x, sar_feats["scale0"])
-        skip0 = x
-        x     = self.down0to1(x)
+        x, skip1 = self._ckpt(self.enc1, x, t_emb, sar_feats["scale1"])
 
-        # Escala 1
-        x     = self._ckpt(self.enc1, x, t_emb)
-        x     = self._ckpt(self.sf1, x, sar_feats["scale1"])
-        skip1 = x
-        x     = self.down1to2(x)
+        x, skip2 = self._ckpt(self.enc2, x, t_emb, sar_feats["scale2"])
 
-        # Escala 2
-        x     = self._ckpt(self.enc2, x, t_emb)
-        x     = self._ckpt(self.sf2, x, sar_feats["scale2"])
-        skip2 = x
-        x     = self.down2to3(x)
+        x, skip3 = self._ckpt(self.enc3, x, t_emb, sar_feats["scale3"])
 
-        # Escala 3
-        x     = self._ckpt(self.enc3, x, t_emb)
-        x     = self._ckpt(self.sf3, x,  sar_feats["scale3"])
-        skip3 = x
+        if self.has_enc4:
+          x, skip4 = self._ckpt(self.enc4, x, t_emb, sar_feats["scale4"])
 
         # Bottleneck
         x = self._ckpt(self.mid1,   x, t_emb)
-        x = self._ckpt(self.mid2,   x, t_emb)
         x = self._ckpt(self.sf_mid, x, sar_feats["mid"])
+        x = self._ckpt(self.mid2,   x, t_emb)
 
-        # Decoder
-        x = self.up3(x, skip2, t_emb)
-        x = self.up2(x, skip1, t_emb)
-        x = self.up1(x, skip0, t_emb)
+        if self.has_enc4:
+            x = self.up4(x, skip4, t_emb)
+
+        x = self.up3(x, skip3, t_emb)
+        x = self.up2(x, skip2, t_emb)
+        x = self.up1(x, skip1, t_emb)
 
         return self.out(x)
-    
-
 
 # -------------------------
 # Training loop mínimo
@@ -520,7 +457,9 @@ class DBCR(nn.Module):
 # -------------------------
 
 if __name__ == "__main__":
-    B, H, W = 2, 128, 128
+    B, H, W = 1, 256, 256
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model = DBCR(
         image_channels=6,
@@ -532,15 +471,21 @@ if __name__ == "__main__":
         window_size_not_sf0=None,
         window_size_sf0=8,
         use_checkpoint=True,
-    ).cuda()
+        include_encoder_4=True,
+    ).to(device)
 
-    x_t       = torch.randn(B, 6, H, W).cuda()
-    t         = torch.randint(0, 1000, (B,)).cuda()
-    s2_cloudy = torch.randn(B, 6, H, W).cuda()
-    sar       = torch.randn(B, 2, H, W).cuda()
+    x_t       = torch.randn(B, 6, H, W).to(device)
+    t         = torch.randint(0, 1000, (B,)).to(device)
+    s2_cloudy = torch.randn(B, 6, H, W).to(device)
+    sar       = torch.randn(B, 2, H, W).to(device)
 
     model.train()
-    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+
+    if device.type == "cuda":
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            out  = model(x_t, t, s2_cloudy, sar)
+            loss = out.mean()
+    else:
         out  = model(x_t, t, s2_cloudy, sar)
         loss = out.mean()
     loss.backward()

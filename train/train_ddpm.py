@@ -59,9 +59,7 @@ def run(model, batch, optimizer, device, sar_mode, noise_scheduler):
 
 def fit(model, train_loader, lr, device, sar_mode, noise_scheduler, num_epochs=50):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=2
-    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
     history = {"train_loss": []}
 
     for epoch in range(num_epochs):

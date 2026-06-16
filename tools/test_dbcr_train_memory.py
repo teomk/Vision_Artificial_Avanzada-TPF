@@ -75,6 +75,7 @@ def test_config(
     window_size_sf0,
     window_size_not_sf0,
     use_checkpoint,
+    include_encoder_4,
     lr,
     weight_decay,
     device,
@@ -84,6 +85,7 @@ def test_config(
     print(f"batch={batch_size} | res={h}x{w} | base_channels={base_channels}")
     print(f"window_sf0={window_size_sf0} | window_not_sf0={window_size_not_sf0}")
     print(f"checkpoint={use_checkpoint} | optimizer=AdamW")
+    print(f"include_encoder_4={include_encoder_4}")
     print("=" * 80)
 
     reset_memory()
@@ -98,6 +100,7 @@ def test_config(
         window_size_sf0=window_size_sf0,
         window_size_not_sf0=window_size_not_sf0,
         use_checkpoint=use_checkpoint,
+        include_encoder_4=include_encoder_4,
     ).to(device)
 
     model.train()
@@ -140,9 +143,10 @@ def test_config(
         print("RESULTADO: OOM")
         ok = False
 
-    del model
-    del optimizer
-    reset_memory()
+    finally:
+        del model
+        del optimizer
+        reset_memory()
 
     return ok
 
@@ -156,6 +160,12 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--batches", type=int, nargs="+", default=[1, 2, 4, 6])
+    parser.add_argument(
+        "--enc4",
+        choices=["off", "on", "both"],
+        default="both",
+        help="Probar sin enc4, con enc4 o ambas variantes."
+    )
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
@@ -207,6 +217,7 @@ def main():
                 window_size_sf0=cfg["window_size_sf0"],
                 window_size_not_sf0=cfg["window_size_not_sf0"],
                 use_checkpoint=cfg["use_checkpoint"],
+                include_encoder_4=cfg["include_encoder_4"],
                 lr=args.lr,
                 weight_decay=args.weight_decay,
                 device=device,

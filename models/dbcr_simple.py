@@ -86,7 +86,6 @@ class TimeNAFBlock(nn.Module):
         dw_channels = channels * dw_expand
         ffn_channels = channels * ffn_expand
 
-        # Primera parte: MBConv simplificado
         self.norm1 = LayerNorm2d(channels)
 
         self.conv1 = nn.Conv2d(channels, dw_channels, kernel_size=1)
@@ -118,8 +117,7 @@ class TimeNAFBlock(nn.Module):
 
         self.time_proj2 = nn.Linear(time_dim, channels)
 
-        # Escalas residuales inicializadas en cero.
-        # Esto estabiliza mucho el arranque del entrenamiento.
+
         self.beta = nn.Parameter(torch.zeros(1, channels, 1, 1))
         self.gamma = nn.Parameter(torch.zeros(1, channels, 1, 1))
 
@@ -291,7 +289,8 @@ class DBCRControlNet(nn.Module):
         self.down2 = DownBlockNAF(base_channels * 2, base_channels * 4, time_dim)
         self.down3 = DownBlockNAF(base_channels * 4, base_channels * 8, time_dim)
  
-        self.mid = TimeNAFBlock(base_channels * 8, time_dim)
+        self.mid1 = TimeNAFBlock(base_channels * 8, time_dim)
+        self.mid2 = TimeNAFBlock(base_channels * 8, time_dim)
  
         # Zero convs: inicializadas en cero para no perturbar el U-Net al arrancar
         self.zero_conv_skip1 = nn.Conv2d(base_channels * 2, base_channels * 2, kernel_size=1)
@@ -324,7 +323,8 @@ class DBCRControlNet(nn.Module):
         x, skip2 = self.down2(x, t_emb)
         x, skip3 = self.down3(x, t_emb)
  
-        x = self.mid(x, t_emb)
+        x = self.mid1(x, t_emb)
+        x = self.mid2(x, t_emb)
  
         return {
             "skip1": self.zero_conv_skip1(skip1),
