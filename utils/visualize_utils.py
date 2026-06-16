@@ -63,11 +63,11 @@ def to_rgb(tensor, bands=(2, 1, 0), stats=None):
 def to_gray(tensor):
     """Tensor [1, H, W] o [H, W] → array [H, W] para imshow."""
     if tensor.ndim == 3:
-        return tensor[0].numpy()
-    return tensor.numpy()
+        return tensor[0].detach().cpu().numpy()
+    return tensor.detach().cpu().numpy()
 
 def to_sar(tensor, band=0):
     """Tensor SAR [2, H, W] → array [H, W] normalizado para visualizar."""
-    img = tensor[band].numpy()
+    img = tensor[band].detach().cpu().numpy()
     p2, p98 = np.percentile(img, 2), np.percentile(img, 98)
     return np.clip((img - p2) / (p98 - p2 + 1e-8), 0, 1)
