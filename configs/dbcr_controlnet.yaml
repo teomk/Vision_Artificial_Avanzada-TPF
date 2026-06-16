@@ -10,9 +10,10 @@ train:
   T: 1000
   sigmoid_k: 10.0
   load_filename: "dbcr_no_sar_naf_v2.pth"
+  resume_filename: "None"
 
 huggingface:
   repo_id: "LucioLuque/lama"
-  save_filename: "dbcr_controlnet_v1.pth"
-  version: 1
-  notes: "Con ControlNet, lr=1e-4, grad clip, scheduler"
+  save_filename: "dbcr_controlnet_v2.pth"
+  version: 2
+  notes: "Con ControlNet, lr=1e-4, grad clip, scheduler, LA VOLVI A HACER PORQUE TENIA ALGO MAL LA CONTROLNET"

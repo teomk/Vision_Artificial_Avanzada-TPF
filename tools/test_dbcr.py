@@ -91,6 +91,7 @@ def profile_config(
         window_size_not_sf0=window_size_not_sf0,
         window_size_sf0=window_size_sf0,
         use_checkpoint=use_checkpoint,
+        include_encoder_4=False,
     ).to(device)
     model.train()
 
@@ -168,7 +169,7 @@ def main():
             label="Window en sf0 (ws=8) + checkpoint OFF",
             window_size_sf0=8,
             window_size_not_sf0=None,
-            use_checkpoint=False,M
+            use_checkpoint=False,
         ),
         dict(
             label="Sin window en sf0 (global) + checkpoint ON",

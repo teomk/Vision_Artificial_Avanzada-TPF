@@ -152,6 +152,7 @@ def test_config(
 
 
 def main():
+    # python 
     parser = argparse.ArgumentParser()
     parser.add_argument("--h", type=int, default=256)
     parser.add_argument("--w", type=int, default=256)

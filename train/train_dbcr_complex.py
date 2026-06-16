@@ -1,4 +1,5 @@
 import sys
+import io
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -70,19 +71,31 @@ def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
     return loss.item()
 
 
-def fit(model, train_loader, lr, device, sar_mode, num_epochs=50, T=1000, sigmoid_k=10.0):
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
-    history = {"train_loss": []}
+def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
+        start_epoch=0, num_epochs=50, T=1000, sigmoid_k=10.0, history=None,
+        repo_id=None, save_filename=None, checkpoint_every=None):
+    """
+    start_epoch: índice (0-based) de la primera época a correr en esta llamada.
+    num_epochs:  cuántas épocas correr en esta llamada (no el total acumulado).
+    history:     dict previo a continuar, o None para arrancar de cero.
+    checkpoint_every: si se especifica (y hay repo_id/save_filename), sube a HF
+                       un checkpoint intermedio cada N épocas (resiliencia ante
+                       cortes, ya que no se guarda nada en disco local).
+    """
+    if history is None:
+        history = {"train_loss": []}
 
-    for epoch in range(num_epochs):
+    last_epoch = start_epoch - 1  # por si num_epochs == 0
+
+    for epoch in range(start_epoch, start_epoch + num_epochs):
 
         epoch_loss = 0.0
         num_batches = 0
-        progress_bar = tqdm(train_loader, desc=f"Época {epoch+1}/{num_epochs}", unit="batch")
+        progress_bar = tqdm(train_loader, desc=f"Época {epoch+1}", unit="batch")
 
         for batch in progress_bar:
-            loss = run(model=model, batch=batch, optimizer=optimizer, device=device, sar_mode=sar_mode, T=T, sigmoid_k=sigmoid_k)
+            loss = run(model=model, batch=batch, optimizer=optimizer, device=device,
+                       sar_mode=sar_mode, T=T, sigmoid_k=sigmoid_k)
 
             epoch_loss += loss
             num_batches += 1
@@ -96,17 +109,59 @@ def fit(model, train_loader, lr, device, sar_mode, num_epochs=50, T=1000, sigmoi
         avg_loss = epoch_loss / num_batches
         history["train_loss"].append(avg_loss)
         scheduler.step(avg_loss)
+        last_epoch = epoch
 
         if device.type == "cuda":
             print(f"  Época {epoch+1}: avg_loss={avg_loss:.6f} | "
                   f"VRAM pico={torch.cuda.max_memory_allocated()/1e9:.2f}GB | "
                   f"lr={optimizer.param_groups[0]['lr']:.2e}")
 
-    return history
+        # checkpoint intermedio a HF (sin nada en disco local persistente)
+        if checkpoint_every and repo_id and save_filename and (epoch + 1) % checkpoint_every == 0:
+            ckpt = build_checkpoint(model, optimizer, scheduler, last_epoch, history)
+            upload_checkpoint_to_hf(ckpt, repo_id=repo_id, filename=save_filename)
+            print(f"  Checkpoint intermedio subido a HF (época {epoch+1})")
+
+    return history, last_epoch
+
+
+def build_checkpoint(model, optimizer, scheduler, epoch, history):
+    return {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict(),
+        "epoch": epoch,          # última época completada (0-based)
+        "history": history,
+    }
+
+
+def upload_checkpoint_to_hf(checkpoint, repo_id, filename):
+    """
+    Sube el checkpoint completo a HF SIN escribir nada a disco local.
+    Usa torch.save sobre un buffer en memoria (io.BytesIO) y entrega
+    los bytes a upload_model. Esto asume que upload_model (en hf_utils.py)
+    sabe aceptar bytes/buffer ademas de un state_dict; si tu implementacion
+    actual sólo acepta un state_dict y hace torch.save a un path interno,
+    hay que ajustar hf_utils.py (ver nota más abajo).
+    """
+    buffer = io.BytesIO()
+    torch.save(checkpoint, buffer)
+    buffer.seek(0)
+    upload_model(model_state_dict=buffer, repo_id=repo_id, filename=filename)
+
+
+def download_checkpoint_from_hf(repo_id, filename, map_location):
+    """
+    Descarga un checkpoint completo desde HF. download_model ya devuelve
+    el objeto deserializado (asumiendo que internamente hace torch.load),
+    así que esto funciona igual tanto para un state_dict "plano" (modelos
+    viejos) como para un checkpoint completo (dict con varias claves).
+    """
+    return download_model(repo_id=repo_id, filename=filename, map_location=map_location)
 
 
 if __name__ == "__main__":
-    # python train/train_dbcr.py --config configs/dbcr_complex.yaml
+    # python train/train_dbcr_complex.py --config configs/dbcr_complex.yaml
 
     parser = argparse.ArgumentParser(description="Entrenar DBCR con SFBlocks (cross-attention SAR)")
     parser.add_argument(
@@ -129,8 +184,16 @@ if __name__ == "__main__":
     lr          = cfg_train["lr"]
     T           = cfg_train["T"]
     sigmoid_k   = cfg_train["sigmoid_k"]
+
+    # load_filename: carga SOLO pesos (transfer/finetune, arranca optimizer/epoch de cero)
     load_filename = cfg_train.get("load_filename")
     load_filename = None if load_filename in (None, "None") else load_filename
+
+    # resume_filename: carga checkpoint COMPLETO (model+optimizer+scheduler+epoch+history)
+    resume_filename = cfg_train.get("resume_filename")
+    resume_filename = None if resume_filename in (None, "None") else resume_filename
+
+    checkpoint_every = cfg_train.get("checkpoint_every")  # opcional, ej: 5
 
     repo_id       = cfg_hf["repo_id"]
     save_filename = cfg_hf["save_filename"]
@@ -147,10 +210,10 @@ if __name__ == "__main__":
     window_size_sf0     = parse_window(cfg_model.get("window_size_sf0", 8))
     window_size_not_sf0 = parse_window(cfg_model.get("window_size_not_sf0", None))
     use_checkpoint      = cfg_model.get("use_checkpoint", True)
-    include_encoder_4   = cfg_model.get("include_encoder_4", True)
+    include_encoder_4   = cfg_model.get("include_encoder_4", False)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device} | SAR Mode: {sar_mode} | Epochs: {num_epochs}")
+    print(f"Device: {device} | SAR Mode: {sar_mode} | Epochs a correr: {num_epochs}")
     if torch.cuda.is_available():
         print(f"GPU: {torch.cuda.get_device_name(0)}")
         print(f"VRAM total: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
@@ -198,10 +261,31 @@ if __name__ == "__main__":
         include_encoder_4=include_encoder_4,
     ).to(device)
 
-    if load_filename is not None:
-        checkpoint = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
-        model.load_state_dict(checkpoint, strict=True)
-        print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
+    history = {"train_loss": []}
+    start_epoch = 0
+
+    if resume_filename is not None:
+        # --- Continuar un entrenamiento anterior: model + optimizer + scheduler + epoch + history
+        # El history de las épocas anteriores viaja DENTRO del checkpoint de HF (ckpt["history"]),
+        # así que no depende de que exista el YAML local. El YAML local que se escribe al final
+        # es simplemente una copia legible/respaldo, no la fuente de verdad para resumir.
+        ckpt = download_checkpoint_from_hf(repo_id=repo_id, filename=resume_filename, map_location=device)
+        model.load_state_dict(ckpt["model_state_dict"], strict=True)
+        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+        history = ckpt["history"]
+        start_epoch = ckpt["epoch"] + 1
+        print(f"Checkpoint completo cargado desde HF: {repo_id}/{resume_filename}")
+        print(f"Reanudando desde época {start_epoch + 1} (épocas previas: {start_epoch})")
+
+    elif load_filename is not None:
+        # --- Cargar solo pesos (finetune / transfer): optimizer y epoch arrancan de cero
+        loaded = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
+        state_dict = loaded["model_state_dict"] if isinstance(loaded, dict) and "model_state_dict" in loaded else loaded
+        model.load_state_dict(state_dict, strict=True)
+        print(f"Pesos cargados desde HuggingFace: {repo_id}/{load_filename} (optimizer/epoch reiniciados)")
 
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -212,14 +296,23 @@ if __name__ == "__main__":
     print()
 
     # Entrenar
-    history = fit(
+    history, last_epoch = fit(
         model=model, train_loader=loader_train,
-        lr=lr, device=device, sar_mode=sar_mode,
-        num_epochs=num_epochs, T=T, sigmoid_k=sigmoid_k
+        device=device, sar_mode=sar_mode,
+        optimizer=optimizer, scheduler=scheduler,
+        start_epoch=start_epoch, num_epochs=num_epochs,
+        T=T, sigmoid_k=sigmoid_k, history=history,
+        repo_id=repo_id, save_filename=save_filename,
+        checkpoint_every=checkpoint_every,
     )
 
-    # Subir a HuggingFace
-    upload_model(model_state_dict=model.state_dict(), repo_id=repo_id, filename=save_filename)
+    total_epochs_completadas = last_epoch + 1
+
+    # --- Subir checkpoint COMPLETO a HuggingFace (nada se guarda en disco local) ---
+    final_checkpoint = build_checkpoint(model, optimizer, scheduler, last_epoch, history)
+    upload_checkpoint_to_hf(final_checkpoint, repo_id=repo_id, filename=save_filename)
+    print(f"Checkpoint completo subido a HF: {repo_id}/{save_filename}")
+    print(f"Épocas totales acumuladas: {total_epochs_completadas}")
 
     # Registrar versión
     register_version(
@@ -229,7 +322,7 @@ if __name__ == "__main__":
         base_model=save_filename,
         sar_mode=sar_mode,
         phase1_info={
-            "num_epochs": num_epochs, "lr": lr,
+            "num_epochs": total_epochs_completadas, "lr": lr,
             "T": T, "sigmoid_k": sigmoid_k,
             "batch_size": batch_size, "num_weights": parameters,
             "sar_mode": sar_mode,
@@ -248,10 +341,11 @@ if __name__ == "__main__":
         notes=notes,
     )
 
+    # --- History se guarda LOCAL (no a HF) ---
     history_data = {
         "train_loss": history["train_loss"],
         "config": {
-            "num_epochs": num_epochs,
+            "total_epochs_completadas": total_epochs_completadas,
             "lr": lr,
             "batch_size": batch_size,
             "T": T,

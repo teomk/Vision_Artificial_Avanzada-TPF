@@ -457,7 +457,7 @@ class DBCR(nn.Module):
 # -------------------------
 
 if __name__ == "__main__":
-    B, H, W = 1, 256, 256
+    B, H, W = 4, 256, 256
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -471,7 +471,7 @@ if __name__ == "__main__":
         window_size_not_sf0=None,
         window_size_sf0=8,
         use_checkpoint=True,
-        include_encoder_4=True,
+        include_encoder_4=False,
     ).to(device)
 
     x_t       = torch.randn(B, 6, H, W).to(device)

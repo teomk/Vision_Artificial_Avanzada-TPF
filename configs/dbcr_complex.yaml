@@ -10,6 +10,7 @@ train:
   T: 1000
   sigmoid_k: 10.0
   load_filename: "None"  # entrenar desde cero
+  resume_filename: "None"
 
 model_args:
   image_channels: 6
@@ -21,10 +22,11 @@ model_args:
   window_size_sf0: 8        # window attention en sf0 (necesario en 256x256)
   window_size_not_sf0: None  # global attention en sf1/sf2/sf3/sf_mid
   use_checkpoint: true       # gradient checkpointing para ahorrar VRAM
-  include_encoder_4: true     # incluir encoder_4 (con 512 canales) para mejorar resultados a costa de más VRAM
+  include_encoder_4: false     # incluir encoder_4 (con 512 canales) para mejorar resultados a costa de más VRAM
+
 
 huggingface:
   repo_id: "LucioLuque/lama"
   save_filename: "dbcr_complex_v1.pth"
   version: 1
-  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8"
+  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8, checkpoint ON, sin encoder_4."

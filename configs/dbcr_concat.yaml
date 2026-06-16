@@ -5,15 +5,16 @@ model: "dbcr"
 train:
   batch_size: 8
   num_workers: 2
-  num_epochs: 15
+  num_epochs: 30
   lr: 0.0001
   T: 1000
   sigmoid_k: 10.0
-  # load_filename: "None"
-  load_filename: "dbcr_no_sar_naf_v2.pth"
+  load_filename: "None"
+  # load_filename: "dbcr_no_sar_naf_v2.pth"
+  resume_filename: "None"
 
 huggingface:
   repo_id: "LucioLuque/lama"
-  save_filename: "dbcr_concat_v1.pth"
-  version: 1
-  notes: "Con SAR concat, lr=1e-4, grad clip, scheduler"
+  save_filename: "dbcr_concat_v2.pth"
+  version: 2
+  notes: "Con SAR concat, lr=1e-4, grad clip, scheduler, SIN TF"
