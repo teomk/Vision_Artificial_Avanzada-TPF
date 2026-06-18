@@ -183,41 +183,35 @@ def resolve_save_version(
 # ──────────────────────────────────────────────────────────────────────────────
 # Upload
 # ──────────────────────────────────────────────────────────────────────────────
+def upload_model(model_state_dict, repo_id: str, filename: str) -> None:
 
-def upload_model(
-    model_state_dict: dict,
-    repo_id: str,
-    filename: str,
-) -> None:
-    """
-    Guarda el state dict en un archivo temporal y lo sube a HuggingFace.
-
-    Args:
-        model_state_dict: resultado de model.state_dict()
-        repo_id:          e.g. "LucioLuque/lama"
-        filename:         e.g. "lama_no_sar_finetuned_v2.pth"
-    """
     with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as tmp:
-        tmp_path = tmp.name
 
-    try:
         if isinstance(model_state_dict, io.BytesIO):
             model_state_dict.seek(0)
             tmp.write(model_state_dict.read())
-            tmp.flush()
+
         elif isinstance(model_state_dict, (bytes, bytearray)):
             tmp.write(model_state_dict)
-            tmp.flush()
+
         else:
-            torch.save(model_state_dict, tmp_path)
+            torch.save(model_state_dict, tmp)
+
+        tmp.flush()
+        tmp_path = tmp.name
+
+    try:
         print(f"Subiendo '{filename}' a '{repo_id}'...")
+
         upload_file(
             path_or_fileobj=tmp_path,
             path_in_repo=filename,
             repo_id=repo_id,
             repo_type="model",
         )
+
         print(f"Modelo guardado en HuggingFace: {repo_id}/{filename}")
+
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
