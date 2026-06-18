@@ -1,10 +1,5 @@
 import numpy as np
 
-
-import numpy as np
-import torch
-
-
 def get_rgb_stats(*tensors, bands=(2, 1, 0), p_low=2, p_high=98):
     """
     Calcula percentiles RGB comunes para varios tensores [C,H,W].
@@ -31,6 +26,12 @@ def get_rgb_stats(*tensors, bands=(2, 1, 0), p_low=2, p_high=98):
     return p_min, p_max
 
 
+# def get_rgb_stats(*tensors, bands=(2, 1, 0), vmin=0.0, vmax=0.3):
+#     p_min = np.array([vmin, vmin, vmin], dtype=np.float32)
+#     p_max = np.array([vmax, vmax, vmax], dtype=np.float32)
+#     return p_min, p_max
+
+
 def to_rgb(tensor, bands=(2, 1, 0), stats=None):
     """
     Convierte tensor S2 [C,H,W] a RGB.
@@ -49,16 +50,6 @@ def to_rgb(tensor, bands=(2, 1, 0), stats=None):
         img = np.clip(img, 0, 1)
 
     return np.clip(img, 0, 1)
-
-# def to_rgb(tensor, bands=(2, 1, 0)):
-#     img = tensor[[bands[0], bands[1], bands[2]]].permute(1, 2, 0).cpu().numpy()
-#     img = np.clip(img, 0, 1)
-#     out = np.zeros_like(img)
-#     for c in range(3):
-#         p2  = np.percentile(img[:, :, c], 2)
-#         p98 = np.percentile(img[:, :, c], 98)
-#         out[:, :, c] = np.clip((img[:, :, c] - p2) / (p98 - p2 + 1e-8), 0, 1)
-#     return out
 
 def to_gray(tensor):
     """Tensor [1, H, W] o [H, W] → array [H, W] para imshow."""

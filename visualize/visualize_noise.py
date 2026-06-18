@@ -23,10 +23,23 @@ from ddpm_utils import build_sigmoid_ddpm_scheduler
 from ddpm import ConditionalDDPMUNet
 from dbcr_simple import DBCRSimple
 from dbcr_simple_utils import make_bridge_sample, sigmoid_scheduler
-from visualize_utils import to_rgb
+from visualize_utils import to_rgb, get_rgb_stats
 
 
 # ── Schedulers ─────────────────────────────────────────────────────────
+
+def _visualization_timesteps(T, frame_every, device):
+    timesteps = torch.arange(0, T, frame_every, device=device).long()
+    last_t = torch.tensor(T - 1, device=device).long()
+
+    if timesteps.numel() == 0 or timesteps[-1].item() != last_t.item():
+        timesteps = torch.cat([timesteps, last_t.view(1)])
+
+    return timesteps
+
+
+def _reverse_visualization_timesteps(T, frame_every, device):
+    return _visualization_timesteps(T, frame_every, device).flip(0)
 
 def forward_ddpm(clean, scheduler, T, frame_every=100):
     """
@@ -46,7 +59,7 @@ def forward_ddpm(clean, scheduler, T, frame_every=100):
     # Mismo ruido base para ver una progresión suave
     noise = torch.randn_like(clean_b)
 
-    timesteps = torch.arange(0, T, frame_every, device=device).long()
+    timesteps = _visualization_timesteps(T, frame_every, device)
 
     frames = []
 
@@ -80,12 +93,7 @@ def forward_bridge(clean, cloudy, T, frame_every=100, sigmoid_k=10.0):
     clean_b = clean.unsqueeze(0)    # [1, 6, H, W]
     cloudy_b = cloudy.unsqueeze(0)  # [1, 6, H, W]
 
-    timesteps = torch.arange(
-        0,
-        T + 1,
-        frame_every,
-        device=device
-    ).long()
+    timesteps = _visualization_timesteps(T, frame_every, device)
 
     frames = []
 
@@ -134,120 +142,121 @@ def reverse_ddpm(model, condition, device, scheduler, T, n_steps, sar=None):
     return frames
 
 
-def reverse_bridge(model, cloudy_b, clean_gt, condition, device, T, steps=10, sigmoid_k=10.0, sar=None, add_ground_truth=True):
+# def reverse_bridge(model, cloudy_b, clean_gt, condition, device, T, frame_every=100, sigmoid_k=10.0, sar=None, add_ground_truth=False):
+#     """
+#     Reverse DBCR visual copiando exactamente la lógica de eval_dbcr_simple.py.
+
+#     En eval:
+#         x_t = cloudy_b.clone()
+#         timesteps = reversed(forward_timesteps)
+
+#         for t_val in timesteps:
+#             pred_clean = model(x_t, t, condition)
+#             alpha_prev = sigmoid_scheduler(T, sigmoid_k, prev_t)
+#             x_t = (1 - alpha_prev) * pred_clean + alpha_prev * cloudy_b
+
+#     Shapes:
+#         cloudy_b   : [B, 6, H, W]
+#         clean_gt   : [B, 6, H, W]
+#         condition  : [B, 6 o 8, H, W]
+#         sar        : [B, 2, H, W] o None
+#         t          : [B]
+#         alpha_prev : [B, 1, 1, 1]
+#         pred_clean : [B, 6, H, W]
+#         x_t        : [B, 6, H, W]
+#     """
+
+#     model.eval()
+
+#     x_t = cloudy_b.clone()  # [B, 6, H, W]
+
+#     timesteps = _reverse_visualization_timesteps(T, frame_every, device)
+
+#     frames = []
+
+#     # Frame inicial: imagen nubosa completa
+#     frames.append(
+#         (
+#             int(timesteps[0].item()),
+#             x_t[0].clamp(0, 1).detach().cpu()
+#         )
+#     )
+
+#     with torch.no_grad():
+#         for idx, t_val in enumerate(timesteps):
+#             # Igual que en eval_dbcr_simple.py
+#             t = t_val.repeat(x_t.shape[0]).to(device)  # [B]
+
+#             pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)  # [B, 6, H, W]
+
+#             next_t_val = timesteps[idx + 1] if idx + 1 < len(timesteps) else torch.tensor(0, device=device).long()
+#             next_t = next_t_val.repeat(x_t.shape[0]).to(device)
+
+#             alpha_prev = sigmoid_scheduler(T, sigmoid_k, next_t, device)  # [B, 1, 1, 1]
+
+#             x_t = ((1.0 - alpha_prev) * pred_clean + alpha_prev * cloudy_b)  # [B, 6, H, W]
+
+#             x_t = x_t.clamp(0, 1)
+
+#             # Este frame representa el nuevo x_t luego del update.
+#             frames.append((int(next_t_val.item()), x_t[0].clamp(0, 1).detach().cpu()))
+
+#     if add_ground_truth:
+#         frames.append(("GT", clean_gt[0].clamp(0, 1).detach().cpu()))
+
+#     return frames
+
+def reverse_bridge(model, cloudy_b, clean_gt, condition, device, T, steps=10, sigmoid_k=10.0, sar=None, add_ground_truth=False):
     """
-    Reverse DBCR visual copiando exactamente la lógica de eval_dbcr_simple.py.
-
-    En eval:
-        x_t = cloudy_b.clone()
-        timesteps = torch.linspace(T, 1, steps).long()
-
-        for t_val in timesteps:
-            pred_clean = model(x_t, t, condition)
-            alpha_prev = sigmoid_scheduler(T, sigmoid_k, t_val - T//steps)
-            x_t = (1 - alpha_prev) * pred_clean + alpha_prev * cloudy_b
-
-        return pred_clean
-
-    Shapes:
-        cloudy_b   : [B, 6, H, W]
-        clean_gt   : [B, 6, H, W]
-        condition  : [B, 6 o 8, H, W]
-        sar        : [B, 2, H, W] o None
-        t          : [B]
-        alpha_prev : [B, 1, 1, 1]
-        pred_clean : [B, 6, H, W]
-        x_t        : [B, 6, H, W]
+    Calco exacto de dbcr_simple_utils.inference, guardando frames intermedios.
     """
-
     model.eval()
 
-    x_t = cloudy_b.clone()  # [B, 6, H, W]
+    x_t = cloudy_b.clone()
+    timesteps = torch.linspace(T, 1, steps).long().to(device)
 
-    timesteps = torch.linspace(
-        T,
-        1,
-        steps
-    ).long().to(device)
-
-    frames = []
-
-    # Frame inicial: imagen nubosa completa
-    frames.append(
-        (
-            T,
-            x_t[0].clamp(0, 1).detach().cpu()
-        )
-    )
-
-    pred_clean = None
+    frames = [(int(timesteps[0].item()), x_t[0].clamp(0, 1).detach().cpu())]
 
     with torch.no_grad():
         for t_val in timesteps:
-            # Igual que en eval_dbcr_simple.py
-            t = t_val.repeat(x_t.shape[0]).to(device)  # [B]
+            B = x_t.shape[0]
+            t = t_val.repeat(B).to(device)
 
-            pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)  # [B, 6, H, W]
+            with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type == "cuda"):
+                pred_clean = model(x_t=x_t, t=t, s2_cloudy=condition, sar=sar)
 
-            prev_t = (t_val - T // steps).clamp(min=1)
+            prev_t = (t_val - (T // steps)).clamp(min=1)
+            prev_t = prev_t.repeat(B).to(device)
 
-            alpha_prev = sigmoid_scheduler(T, sigmoid_k, prev_t.repeat(x_t.shape[0]).to(device), device)  # [B, 1, 1, 1]
+            x_t = make_bridge_sample(
+                s2_clean=pred_clean.float(), s2_cloudy=cloudy_b,
+                t=prev_t, T=T, sigmoid_k=sigmoid_k, device=device
+            ).clamp(0, 1)
 
-            x_t = ((1.0 - alpha_prev) * pred_clean + alpha_prev * cloudy_b)  # [B, 6, H, W]
-
-            x_t = x_t.clamp(0, 1)
-
-            # Este frame representa el nuevo x_t luego del update
-            frames.append((int(prev_t.item()), x_t[0].clamp(0, 1).detach().cpu()))
-
-    # IMPORTANTE:
-    # La evaluación retorna pred_clean, no x_t.
-    # Por eso conviene mostrarlo explícitamente.
-    if pred_clean is not None:
-        frames.append(("PRED", pred_clean[0].clamp(0, 1).detach().cpu()))
+            frames.append((int(prev_t[0].item()), x_t[0].clamp(0, 1).detach().cpu()))
 
     if add_ground_truth:
         frames.append(("GT", clean_gt[0].clamp(0, 1).detach().cpu()))
 
     return frames
 
-# ── Plotting ────────────────────────────────────────────────────────────
-
-def plot_frames(frames, title, fig, gs_row, row_label):
-    n_cols = len(frames)
-    for col, (t_val, img) in enumerate(frames):
-        ax = fig.add_subplot(gs_row[col])
-        ax.imshow(to_rgb(img))
-        ax.axis("off")
-        ax.set_title(f"t={t_val}", fontsize=8, pad=3)
-        if col == 0:
-            ax.set_ylabel(row_label, fontsize=9, rotation=90, labelpad=6)
-
-    fig.text(
-        0.5,
-        gs_row[0].get_position(fig).y1 + 0.01,
-        title,
-        ha="center", fontsize=10, fontweight="bold"
-    )
-
-
 def build_figure(rows):
     """
     rows: lista de (title, row_label, frames)
     """
-    n_cols = max(len(f) for _, _, f in rows)
+    n_cols = max(len(f) for _, _, f, _ in rows)
     n_rows = len(rows)
 
     fig = plt.figure(figsize=(2.5 * n_cols, 3.2 * n_rows))
     gs  = gridspec.GridSpec(n_rows, n_cols, figure=fig, hspace=0.4, wspace=0.05)
 
-    for row_idx, (title, row_label, frames) in enumerate(rows):
-        # Pad con frames vacíos si hay menos columnas
+    for row_idx, (title, row_label, frames, stats) in enumerate(rows):
+
         padded = frames + [(None, None)] * (n_cols - len(frames))
         for col, (t_val, img) in enumerate(padded):
             ax = fig.add_subplot(gs[row_idx, col])
             if img is not None:
-                ax.imshow(to_rgb(img))
+                ax.imshow(to_rgb(img, stats=stats))
                 ax.set_title(f"t={t_val}", fontsize=8, pad=3)
             else:
                 ax.set_visible(False)
@@ -255,13 +264,13 @@ def build_figure(rows):
             if col == 0:
                 ax.set_ylabel(row_label, fontsize=9)
 
-        # Título de fila
-        fig.text(
-            0.01,
-            gs[row_idx, 0].get_position(fig).y0 + gs[row_idx, 0].get_position(fig).height / 2,
-            title,
-            va="center", ha="left", fontsize=9, fontweight="bold", rotation=0
-        )
+        # # Título de fila
+        # fig.text(
+        #     0.01,
+        #     gs[row_idx, 0].get_position(fig).y0 + gs[row_idx, 0].get_position(fig).height / 2,
+        #     title,
+        #     va="center", ha="left", fontsize=9, fontweight="bold", rotation=0
+        # )
 
     return fig
 
@@ -303,6 +312,9 @@ if __name__ == "__main__":
     # python visualize/visualize_noise.py --config configs/dbcr_no_sar.yaml --direction forward
     # python visualize/visualize_noise.py --config configs/ddpm_concat.yaml --direction reverse --steps 50
 
+    # python visualize/visualize_noise.py --config configs/ddpm_none.yaml --direction forward --idx 100 --save_path imgs/ddpm_noise.png
+    # python visualize/visualize_noise.py --config configs/ddpm_none.yaml --direction forward --idx 100 --save_path imgs/ddpm_noise.png
+
     parser = argparse.ArgumentParser(description="Visualizar proceso de ruido forward/reverse (DDPM o DBCR)")
     parser.add_argument("--config",    type=str, required=True,                              help="Ruta al config YAML")
     parser.add_argument("--direction", type=str, default="both", choices=["forward", "reverse", "both"], help="Proceso a visualizar (default: both)")
@@ -333,8 +345,8 @@ if __name__ == "__main__":
     cloudy_b, clear_b, condition, sar = load_sample(ds, args.idx, sar_mode, device)
 
     # # Scheduler DDPM (se usa para forward en ambos modelos, y para reverse en DDPM)
-    sigmoid_k = cfg["train"].get("sigmoid_k", 25.0)
-    alpha_min = cfg["train"].get("alpha_min", 1e-4)
+    sigmoid_k = cfg["train"].get("sigmoid_k", 10.0)
+    alpha_min = cfg["train"].get("alpha_min", 0.0001)
 
     scheduler = build_sigmoid_ddpm_scheduler(
         T=T,
@@ -344,15 +356,17 @@ if __name__ == "__main__":
 
     rows = []
 
+    stats = get_rgb_stats(cloudy_b.squeeze(0))
+
     # ── Forward ──
     if args.direction in ("forward", "both"):
         if model_type == "ddpm":
             fwd_frames = forward_ddpm(clear_b.squeeze(0), scheduler, T, args.frame_every)
-            rows.append(("DDPM — Forward (ruido gaussiano progresivo)", "x_t", fwd_frames))
+            rows.append(("DDPM — Forward", "x_t", fwd_frames, stats))
 
         elif model_type == "dbcr":
             fwd_frames = forward_bridge(clear_b.squeeze(0), cloudy_b.squeeze(0), T, args.frame_every)
-            rows.append(("DBCR — Forward (bridge: limpia → nubosa)", "x_t", fwd_frames))
+            rows.append(("DBCR — Forward", "x_t", fwd_frames, stats))
 
     # ── Reverse (necesita modelo) ──
     if args.direction in ("reverse", "both"):
@@ -367,13 +381,13 @@ if __name__ == "__main__":
                 image_channels=image_channels,
                 condition_channels=condition_channels,
                 base_channels=64,
-                time_dim=256,
+                time_dim=128,
             )
             model.load_state_dict(checkpoint)
             model = model.float().to(device)
 
             rev_frames = reverse_ddpm(model, condition, device, scheduler, T, args.steps, sar=sar)
-            rows.append(("DDPM — Reverse (ruido → imagen limpia)", "x_t", rev_frames))
+            rows.append(("DDPM — Reverse", "x_t", rev_frames, stats))
 
         elif model_type == "dbcr":
             
@@ -395,20 +409,23 @@ if __name__ == "__main__":
                 device=device,
                 T=T,
                 steps=args.steps,
-                sigmoid_k=10,
+                sigmoid_k=sigmoid_k,
                 sar=sar,
                 add_ground_truth=True
             )
-            rows.append(("DBCR — Reverse (nubosa → imagen limpia)", "x_t", rev_frames))
+            rows.append(("DBCR — Reverse", "x_t", rev_frames, stats))
 
     # ── Plot ──
     fig = build_figure(rows)
-    fig.suptitle(
-        f"{model_type.upper()} | SAR: {sar_mode} | sample idx: {args.idx}",
-        fontsize=12, y=1.01
-    )
+    # fig.suptitle(
+    #     f"{model_type.upper()} | SAR: {sar_mode} | sample idx: {args.idx}",
+    #     fontsize=12, y=1.01
+    # )
 
     if args.save_path is not None:
+        #if folder does not exist, create it
+        if not Path(args.save_path).parent.exists():
+            Path(args.save_path).parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(args.save_path, bbox_inches="tight", dpi=150)
         print(f"Figura guardada en: {args.save_path}")
     else:

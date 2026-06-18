@@ -161,8 +161,8 @@ def save_visual_report(path, out_path, scale=10000.0):
         ax.axis("off")
 
     plt.tight_layout()
-    out_rgb = out_path.with_name(out_path.stem + "_rgb_candidates.png")
-    fig.savefig(out_rgb, dpi=150, bbox_inches="tight")
+    # out_rgb = out_path.with_name(out_path.stem + "_rgb_candidates.png")
+    # fig.savefig(out_rgb, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     # Figura 2: todas las bandas en escala de grises
@@ -182,18 +182,20 @@ def save_visual_report(path, out_path, scale=10000.0):
         axes[j].axis("off")
 
     plt.tight_layout()
-    out_bands = out_path.with_name(out_path.stem + "_all_bands_gray.png")
-    fig.savefig(out_bands, dpi=150, bbox_inches="tight")
+    # out_bands = out_path.with_name(out_path.stem + "_all_bands_gray.png")
+    # fig.savefig(out_bands, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     print("\n" + "=" * 80)
     print("REPORTES VISUALES GUARDADOS")
     print("=" * 80)
-    print("RGB candidates:", out_rgb)
-    print("Todas las bandas:", out_bands)
+    # print("RGB candidates:", out_rgb)
+    # print("Todas las bandas:", out_bands)
 
 
 def main():
+    #path = --path data/test/south_america_S2_cloudy/ROIs1158_spring_s2_cloudy_44_p30.tif
+    # python tools/inspect_s2_bands.py --path data/test/south_america_S2_cloudy/ROIs1158_spring_s2_cloudy_44_p30.tif --scale 10000
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--path",
@@ -201,12 +203,12 @@ def main():
         required=True,
         help="Ruta a un .tif Sentinel-2 clear o cloudy."
     )
-    parser.add_argument(
-        "--out",
-        type=str,
-        default=None,
-        help="Ruta base de salida. Si no se indica, guarda junto al script con nombre inspect_s2."
-    )
+    # parser.add_argument(
+    #     "--out",
+    #     type=str,
+    #     default=None,
+    #     help="Ruta base de salida. Si no se indica, guarda junto al script con nombre inspect_s2."
+    # )
     parser.add_argument(
         "--scale",
         type=float,
@@ -221,10 +223,11 @@ def main():
     if not path.exists():
         raise FileNotFoundError(f"No existe el archivo: {path}")
 
-    if args.out is None:
-        out_path = Path("inspect_s2.png")
-    else:
-        out_path = Path(args.out)
+    # if args.out is None:
+    #     out_path = Path("inspect_s2.png")
+    # else:
+    #     out_path = Path(args.out)
+    out_path = None
 
     print_metadata(path)
     print_band_stats(path, scale=args.scale)

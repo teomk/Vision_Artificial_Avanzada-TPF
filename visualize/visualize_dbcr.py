@@ -68,7 +68,7 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
 
             # compute shared RGB stats from cloudy and clear (exclude SAR)
             # stats = get_rgb_stats(cloudy, clear)
-            stats = get_rgb_stats(cloudy, clear)
+            stats = get_rgb_stats(cloudy)
 
             if has_sar:
                 imgs = [cloudy, to_sar(s1_b.squeeze(0)), pred, clear]
