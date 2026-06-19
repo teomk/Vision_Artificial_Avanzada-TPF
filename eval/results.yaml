@@ -143,3 +143,13 @@ models:
         psnr: 28.1229
         ssim: 0.814571
         sam: 10.4655
+    dbcr_complex_v4:
+      filename: dbcr_complex_v4.pth
+      eval:
+        split: test
+        date: '2026-06-19'
+        steps: 10
+        mae: 0.028305
+        psnr: 28.1349
+        ssim: 0.830156
+        sam: 10.3902
