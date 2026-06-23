@@ -227,6 +227,7 @@ if __name__ == "__main__":
         repo_id=repo_id,
         version=version,
         filename=save_filename,
+        model_name="dbcr_" + sar_mode.lower(),
         base_model=save_filename,
         sar_mode=sar_mode,
         phase1_info={

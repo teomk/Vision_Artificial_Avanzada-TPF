@@ -1,20 +1,21 @@
-sar_mode: "ControlNet"   # usa el modo de unpack_batch que entrega s1 por separado
+sar_mode: "ControlNet"   
 
 model: "dbcr_complex"
 
 train:
-  batch_size: 4          # ajustar según VRAM disponible (ver profiling)
+  batch_size: 4         
   num_workers: 2
   num_epochs: 15
   lr: 0.0001
   T: 1000
   sigmoid_k: 10.0
   load_filename: "None"  # entrenar desde cero
-  resume_filename: "dbcr_complex_v3.pth"
+  # resume_filename: "dbcr_complex_v3.pth"
+  resume_filename: "dbcr_complex_v2.pth"
 
 model_args:
-  image_channels: 6
-  condition_channels: 6
+  image_channels: 13
+  condition_channels: 13
   sar_channels: 2
   base_channels: 64
   time_dim: 128
@@ -27,6 +28,6 @@ model_args:
 
 huggingface:
   repo_id: "LucioLuque/lama"
-  save_filename: "dbcr_complex_v4.pth"
-  version: 4
-  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8, checkpoint ON, sin encoder_4. CON 6 BANDAS + 15 epocas + 15 epocas, es decir 45. Parte desde complex v3 que fuereon 30."
+  save_filename: "dbcr_complex_v5.pth"
+  version: 5
+  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8, checkpoint ON, sin encoder_4. CON 13 BANDAS + 15 epocas, es decir 30. Parte desde complex v2 que fueron 15."

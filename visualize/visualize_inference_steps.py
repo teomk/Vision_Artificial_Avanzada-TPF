@@ -27,13 +27,13 @@ from evaluate_utils import psnr
 REPO_ID   = "LucioLuque/lama"
 FILENAME  = "dbcr_complex_v4.pth"
 SAR_MODE  = "ControlNet"
-SEED      = 2
+SEED      = 0
 N_SAMPLES = 2
 T         = 1000
 SIGMOID_K = 10.0
 
-# STEPS_LIST = [1, 5, 10, 15, 20]
-STEPS_LIST = [1, 1, 1, 1, 1]
+STEPS_LIST = [1, 5, 10, 15, 20]
+# STEPS_LIST = [1, 1, 1, 1, 1]
 
 COL_LABELS = ["SAR", "Nublada"] + [f"{s} steps" for s in STEPS_LIST] + ["Original"]
 

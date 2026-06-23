@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-import tqdm
+from tqdm import tqdm
 
 from dataset_utils import unpack_batch
 
