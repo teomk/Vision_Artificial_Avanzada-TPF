@@ -19,12 +19,11 @@ sys.path.append(str(MODELS_DIR))
 sys.path.append(str(UTILS_DIR))
 
 from dbcr_simple import DBCRSimple
-from hf_utils import download_model, upload_model, resolve_save_version, register_version
-from dbcr_simple_utils import make_bridge_sample
+from hf_utils import download_model, upload_model, register_version
+from dbcr_utils import make_bridge_sample
 from dataset_utils import unpack_batch
 
 from dataset import SEN12MSCRDataset
-
 
 def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
     model.train()
@@ -88,7 +87,6 @@ def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
 
     return history, last_epoch
 
-
 def build_checkpoint(model, optimizer, scheduler, epoch, history):
     return {
         "model_state_dict": model.state_dict(),
@@ -97,7 +95,6 @@ def build_checkpoint(model, optimizer, scheduler, epoch, history):
         "epoch": epoch,          # última época completada (0-based)
         "history": history,
     }
-
 
 if __name__ == "__main__":
     # python train/train_dbcr_simple.py --config configs/dbcr_none.yaml
@@ -125,14 +122,9 @@ if __name__ == "__main__":
     T           = cfg_train["T"]
     sigmoid_k   = cfg_train["sigmoid_k"]
 
-    # load_filename: checkpoint VIEJO (solo pesos, .pth plano) o de otro sar_mode.
-    # Sirve como punto de partida para FINETUNE: optimizer/scheduler/epoch arrancan de cero.
-    # Soporta el parche de canales Concat (6 -> 8) como antes.
     load_filename = cfg_train.get("load_filename")
     load_filename = None if load_filename in (None, "None") else load_filename
 
-    # resume_filename: checkpoint COMPLETO generado por ESTA versión del script
-    # (model+optimizer+scheduler+epoch+history). Continúa el entrenamiento exacto.
     resume_filename = cfg_train.get("resume_filename")
     resume_filename = None if resume_filename in (None, "None") else resume_filename
 
@@ -141,7 +133,6 @@ if __name__ == "__main__":
     version       = cfg_hf["version"]
     notes         = cfg_hf["notes"]
 
-    # Arquitectura fija
     image_channels     = 6
     base_channels      = 64
     time_dim           = 128
@@ -151,28 +142,17 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | SAR Mode: {sar_mode} | Condition Channels: {condition_channels} | Epochs a correr: {num_epochs}")
 
-    # Dataset
     ds_train = SEN12MSCRDataset(split="train", include_s1=sar_mode != "None", include_mask=False)
-
     loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"))
 
-    print(device.type == "cuda")
-
-    model = DBCRSimple(
-        image_channels=image_channels,
-        condition_channels=condition_channels,
-        base_channels=base_channels,
-        time_dim=time_dim,
-        control_net=(sar_mode == "ControlNet")
-    ).to(device)
+    model = DBCRSimple(image_channels=image_channels, condition_channels=condition_channels, base_channels=base_channels, time_dim=time_dim, control_net=(sar_mode == "ControlNet")).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
     history = {"train_loss": []}
     start_epoch = 0
 
-    if resume_filename is not None:
-        # --- Continuar un entrenamiento anterior (checkpoint completo) ---
+    if resume_filename is not None: # Continuar un entrenamiento anterior: model + optimizer + scheduler + epoch + history
         ckpt = download_model(repo_id=repo_id, filename=resume_filename, map_location=device)
         model.load_state_dict(ckpt["model_state_dict"], strict=True)
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
@@ -182,11 +162,8 @@ if __name__ == "__main__":
         print(f"Checkpoint completo cargado desde HF: {repo_id}/{resume_filename}")
         print(f"Reanudando desde época {start_epoch + 1} (épocas previas: {start_epoch})")
 
-    elif load_filename is not None:
-        # --- Cargar solo pesos (finetune / transfer): optimizer y epoch arrancan de cero ---
+    elif load_filename is not None: # finetuning / transfer learning
         loaded = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
-        # Soporta tanto checkpoints completos viejos (con "model_state_dict") como
-        # .pth planos (solo state_dict), que es el caso típico de modelos legacy.
         checkpoint = loaded["model_state_dict"] if isinstance(loaded, dict) and "model_state_dict" in loaded else loaded
 
         if sar_mode == "Concat":
@@ -239,13 +216,9 @@ if __name__ == "__main__":
 
     total_epochs_completadas = last_epoch + 1
 
-    # --- Subir checkpoint COMPLETO a HuggingFace ---
     final_checkpoint = build_checkpoint(model, optimizer, scheduler, last_epoch, history)
-    upload_model(
-        model_state_dict=final_checkpoint,
-        repo_id=repo_id,
-        filename=save_filename,
-    )
+    upload_model(model_state_dict=final_checkpoint, repo_id=repo_id, filename=save_filename)
+    
     print(f"Checkpoint completo subido a HF: {repo_id}/{save_filename}")
     print(f"Épocas totales acumuladas: {total_epochs_completadas}")
 

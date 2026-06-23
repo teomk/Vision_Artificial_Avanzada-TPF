@@ -13,6 +13,9 @@ def make_bridge_sample(s2_clean, s2_cloudy, t, T, sigmoid_k, device):
     alpha_t = sigmoid_scheduler(T, sigmoid_k, t, device)
     return (1.0 - alpha_t) * s2_clean + alpha_t * s2_cloudy
 
+
+
+
 def inference(model, cloudy_b, condition, device, T=1000, steps=10, sar=None, sigmoid_k=10.0, show_progress: bool = False):
     """
     cloudy_b:  [1, 6, H, W] — solo S2, usado para el bridge (x_t)

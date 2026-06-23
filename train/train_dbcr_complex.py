@@ -21,11 +21,10 @@ sys.path.append(str(UTILS_DIR))
 
 from dbcr_complex import DBCR
 from hf_utils import download_model, upload_model, register_version
-from dbcr_simple_utils import make_bridge_sample
+from dbcr_utils import make_bridge_sample
 from dataset_utils import unpack_batch
 
 from dataset import SEN12MSCRDataset
-
 
 def parse_window(value):
     """'8' -> 8, 'None'/'none'/'null'/'-1' -> None"""
@@ -36,18 +35,10 @@ def parse_window(value):
         return None
     return int(value)
 
-
 def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
     model.train()
 
     s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
-
-    if sar is None:
-        raise ValueError(
-            f"DBCR (complex, con SFBlocks) necesita SAR como tensor separado. "
-            f"sar_mode='{sar_mode}' devolvió sar=None. Usá sar_mode='ControlNet' "
-            f"(o el modo de tu unpack_batch que entregue s1 por separado)."
-        )
 
     B = s2_clean.shape[0]
 
@@ -135,31 +126,11 @@ def build_checkpoint(model, optimizer, scheduler, epoch, history):
         "history": history,
     }
 
-
 def upload_checkpoint_to_hf(checkpoint, repo_id, filename):
-    """
-    Sube el checkpoint completo a HF SIN escribir nada a disco local.
-    Usa torch.save sobre un buffer en memoria (io.BytesIO) y entrega
-    los bytes a upload_model. Esto asume que upload_model (en hf_utils.py)
-    sabe aceptar bytes/buffer ademas de un state_dict; si tu implementacion
-    actual sólo acepta un state_dict y hace torch.save a un path interno,
-    hay que ajustar hf_utils.py (ver nota más abajo).
-    """
     buffer = io.BytesIO()
     torch.save(checkpoint, buffer)
     buffer.seek(0)
     upload_model(model_state_dict=buffer, repo_id=repo_id, filename=filename)
-
-
-def download_checkpoint_from_hf(repo_id, filename, map_location):
-    """
-    Descarga un checkpoint completo desde HF. download_model ya devuelve
-    el objeto deserializado (asumiendo que internamente hace torch.load),
-    así que esto funciona igual tanto para un state_dict "plano" (modelos
-    viejos) como para un checkpoint completo (dict con varias claves).
-    """
-    return download_model(repo_id=repo_id, filename=filename, map_location=map_location)
-
 
 if __name__ == "__main__":
     # python train/train_dbcr_complex.py --config configs/dbcr_complex.yaml
@@ -236,14 +207,7 @@ if __name__ == "__main__":
     # Dataset
     ds_train = SEN12MSCRDataset(split="train", include_s1=(sar_mode != "None"), include_mask=False, total_bands=(image_channels == 13))
 
-    loader_train = DataLoader(
-        ds_train,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=(device.type == "cuda"),
-        persistent_workers=(num_workers > 0),
-    )
+    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"), persistent_workers=(num_workers > 0))
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
@@ -267,26 +231,21 @@ if __name__ == "__main__":
     history = {"train_loss": []}
     start_epoch = 0
 
-    if resume_filename is not None:
-        # --- Continuar un entrenamiento anterior: model + optimizer + scheduler + epoch + history
-        # El history de las épocas anteriores viaja DENTRO del checkpoint de HF (ckpt["history"]),
-        # así que no depende de que exista el YAML local. El YAML local que se escribe al final
-        # es simplemente una copia legible/respaldo, no la fuente de verdad para resumir.
-        ckpt = download_checkpoint_from_hf(repo_id=repo_id, filename=resume_filename, map_location=device)
+    if resume_filename is not None: # Continuar un entrenamiento anterior: model + optimizer + scheduler + epoch + history
+        ckpt = download_model(repo_id=repo_id, filename=resume_filename, map_location=device)
         model.load_state_dict(ckpt["model_state_dict"], strict=True)
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
         scheduler.load_state_dict(ckpt["scheduler_state_dict"])
         history = ckpt["history"]
         start_epoch = ckpt["epoch"] + 1
         print(f"Checkpoint completo cargado desde HF: {repo_id}/{resume_filename}")
-        print(f"Reanudando desde época {start_epoch + 1} (épocas previas: {start_epoch})")
+        print(f"Reanudando desde época {start_epoch + 1}")
 
-    elif load_filename is not None:
-        # --- Cargar solo pesos (finetune / transfer): optimizer y epoch arrancan de cero
+    elif load_filename is not None: # Finetuning/transfer learning
         loaded = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
         state_dict = loaded["model_state_dict"] if isinstance(loaded, dict) and "model_state_dict" in loaded else loaded
         model.load_state_dict(state_dict, strict=True)
-        print(f"Pesos cargados desde HuggingFace: {repo_id}/{load_filename} (optimizer/epoch reiniciados)")
+        print(f"Pesos cargados desde HuggingFace: {repo_id}/{load_filename}")
 
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -309,7 +268,6 @@ if __name__ == "__main__":
 
     total_epochs_completadas = last_epoch + 1
 
-    # --- Subir checkpoint COMPLETO a HuggingFace (nada se guarda en disco local) ---
     final_checkpoint = build_checkpoint(model, optimizer, scheduler, last_epoch, history)
     torch.save(final_checkpoint, "saved_models/temp_checkpoint.pth")
     upload_checkpoint_to_hf(final_checkpoint, repo_id=repo_id, filename=save_filename)
@@ -344,7 +302,6 @@ if __name__ == "__main__":
         notes=notes,
     )
 
-    # --- History se guarda LOCAL (no a HF) ---
     history_data = {
         "train_loss": history["train_loss"],
         "config": {

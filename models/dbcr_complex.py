@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
-
 # -------------------------
 # Time Embedding
 # -------------------------
@@ -23,7 +22,6 @@ class SinusoidalTimeEmbedding(nn.Module):
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1)
         return emb
 
-
 class TimeMLP(nn.Module):
     def __init__(self, time_dim):
         super().__init__()
@@ -36,7 +34,6 @@ class TimeMLP(nn.Module):
 
     def forward(self, t):
         return self.net(t)
-
 
 # -------------------------
 # NAFNet primitives

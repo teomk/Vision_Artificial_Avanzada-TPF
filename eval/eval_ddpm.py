@@ -1,10 +1,8 @@
 from pathlib import Path
 import torch
 import sys
-import numpy as np
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from diffusers import DDPMScheduler
 import yaml
 import argparse
 from datetime import date
@@ -23,11 +21,8 @@ from ddpm import ConditionalDDPMUNet
 from hf_utils import download_model
 from ddpm_utils import inference, build_sigmoid_ddpm_scheduler
 from dataset_utils import unpack_batch
-from metrics import mae, psnr, ssim, sam
+from evaluate_utils import mae, psnr, ssim, sam
 
-
-
-# ── Evaluación ─────────────────────────────────────────────────────────
 
 def evaluate(model, loader, sar_mode, device, scheduler, steps=50):
     model.eval()
@@ -96,9 +91,6 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
 
     yaml_path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False))
     print(f"Métricas guardadas en {yaml_path} (models.{mkey}.{target_vkey}.eval)")
-
-
-# ── Main ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     # python eval/eval_ddpm.py --config configs/ddpm_none.yaml

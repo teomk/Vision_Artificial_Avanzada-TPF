@@ -1,4 +1,3 @@
-# eval/eval_lama.py
 from pathlib import Path
 import torch
 import sys
@@ -19,10 +18,7 @@ sys.path.append(str(ROOT / "utils"))
 from saicinpainting.training.modules.ffc import FFCResNetGenerator
 from dataset import SEN12MSCRDataset
 from hf_utils import download_model, resolve_load_version
-from metrics import mae, psnr, ssim, sam
-
-
-# ── Modelo ─────────────────────────────────────────────────────────────
+from evaluate_utils import mae, psnr, ssim, sam
 
 def build_model(use_sar: bool) -> FFCResNetGenerator:
     return FFCResNetGenerator(
@@ -35,9 +31,6 @@ def build_model(use_sar: bool) -> FFCResNetGenerator:
         downsample_conv_kwargs={"ratio_gin": 0,    "ratio_gout": 0},
         resnet_conv_kwargs    ={"ratio_gin": 0.75, "ratio_gout": 0.75, "enable_lfu": False},
     )
-
-
-# ── Preparación de batch ───────────────────────────────────────────────
 
 def prepare_batch(batch, use_sar, device):
     if use_sar:
@@ -56,38 +49,7 @@ def prepare_batch(batch, use_sar, device):
 
     return x, clear_b
 
-
-# ── Métricas ───────────────────────────────────────────────────────────
-
-
-def register_eval(
-    filename: str,
-    *,
-    metrics: dict,
-    split: str,
-    use_sar: bool,
-    yaml_path: str = "eval/results.yaml",
-) -> None:
-    """
-    Registra (o sobreescribe) los resultados de evaluación en un YAML local.
-
-    Estructura resultante en eval/results.yaml:
-```yaml
-    models:
-      lama_no_sar:
-        v1:
-          filename: lama_no_sar_finetuned_v1.pth
-          eval:
-            split: test
-            date: "2026-06-08"
-            mae:  0.012345
-            psnr: 32.1234
-            ssim: 0.987654
-            sam:  1.2345
-```
-    """
-    from datetime import date
-
+def register_eval(filename: str, *, metrics: dict, split: str, use_sar: bool, yaml_path: str = "eval/results.yaml") -> None:
     yaml_path = Path(yaml_path)
     yaml_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -106,7 +68,6 @@ def register_eval(
 
     model_versions = data["models"][mkey]
 
-    # Buscar vkey cuyo filename coincida, si no crear entrada mínima
     target_vkey = None
     for vkey, entry in model_versions.items():
         if entry.get("filename") == filename:
@@ -130,9 +91,6 @@ def register_eval(
         yaml.dump(data, f, allow_unicode=True, sort_keys=False)
 
     print(f"Métricas guardadas en {yaml_path} (models.{mkey}.{target_vkey}.eval)")
-
-# ── Evaluación ─────────────────────────────────────────────────────────
-
 
 def evaluate(model, loader, use_sar, device):
     model.eval()
@@ -170,12 +128,7 @@ def evaluate(model, loader, use_sar, device):
         "sam":  float(total_sam  / n_batches),
     }
 
-
-# ── Main ───────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
-
-    # Ejemplos de uso:
     #   python eval/eval_lama.py --config configs/lama_no_sar.yaml
     #   python eval/eval_lama.py --config configs/lama_no_sar.yaml --version 2
     #   python eval/eval_lama.py --config configs/lama_no_sar.yaml --split train
@@ -221,25 +174,15 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Usando: {device} | SAR: {use_sar} | split: {args.split} | Modelo: {filename}")
 
-    # ── Cargar modelo desde HuggingFace ──────────────────────────────────────
     checkpoint = download_model(repo_id=repo_id, filename=filename, map_location=device)
 
     model = build_model(use_sar=use_sar)
     model.load_state_dict(checkpoint)
     model = model.float().to(device)
 
-    # ── Dataset y DataLoader ──────────────────────────────────────────────────
     ds_test = SEN12MSCRDataset(split=args.split, include_s1=use_sar)
     loader  = DataLoader(ds_test, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
-    # ── Evaluar ───────────────────────────────────────────────────────────────
     metrics = evaluate(model, loader, use_sar=use_sar, device=device)
 
-    # ── Registrar métricas en versions.yaml ───────────────────────────────────
-    register_eval(
-       filename=filename,
-        metrics=metrics,
-        split=args.split,
-        use_sar=use_sar,
-        yaml_path="eval/results.yaml",
-    )
+    register_eval(filename=filename, metrics=metrics, split=args.split, use_sar=use_sar, yaml_path="eval/results.yaml")

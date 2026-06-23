@@ -39,6 +39,8 @@ def build_index(folder: Path) -> dict:
     return index
 
 def main() -> None:
+    total_imgs = 0
+    total_triplets_all = 0
     for split in ["train", "test"]:
         s1_idx, s2_idx, cloudy_idx = get_folder_paths(split)
 
@@ -53,13 +55,19 @@ def main() -> None:
         for season in ["spring", "summer", "fall", "winter"]:
             nums = by_season_num.get(season, {})
             total_triplets = sum(len(keys) for keys in nums.values())
+            total_imgs += total_triplets * 3
+            total_triplets_all += total_triplets 
+
             print(f"{season.upper()} — {len(nums)} ROIs — {total_triplets} tripletes — {total_triplets * 3} imágenes")
             roi_num = 0
             for num in sorted(nums.keys(), key=lambda x: int(x)):
+
                 triples_in_num = nums[num]
                 roi_num += 1
+
                 print(f"ROI {roi_num}: {len(triples_in_num)} tripletes — {len(triples_in_num) * 3} imágenes")
             print()
+    print(f"Total tripletes: {total_triplets_all} — Total imágenes: {total_imgs}")
 
 
 if __name__ == "__main__":

@@ -20,69 +20,63 @@ sys.path.append(str(UTILS_DIR))
 from dataset import SEN12MSCRDataset
 from dbcr_simple import DBCRSimple
 from hf_utils import download_model
-from dataset_utils import unpack_batch
-from dbcr_simple_utils import inference
-from metrics import mae, psnr, ssim, sam
+# from dataset_utils import unpack_batch
+# from metrics import mae, psnr, ssim, sam
+# from evaluate_utils import _count_nonfinite
+from dbcr_utils import inference
+from evaluate_utils import evaluate
 
-# ── Evaluación ─────────────────────────────────────────────────────────
+# def evaluate(model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
+#     model.eval()
+#     total_mae = total_psnr = total_ssim = total_sam = 0.0
+#     n_batches = 0
+#     skipped_batches = 0
 
-def _count_nonfinite(tensor):
-    if tensor is None:
-        return 0
-    return int((~torch.isfinite(tensor)).sum().item())
+#     with torch.no_grad():
+#         for batch_idx, batch in enumerate(tqdm(loader, desc="Evaluando", unit="batch"), start=1):
+#             s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
 
-def evaluate(model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
-    model.eval()
-    total_mae = total_psnr = total_ssim = total_sam = 0.0
-    n_batches = 0
-    skipped_batches = 0
+#             bad_inputs = {
+#                 "s2_cloudy": _count_nonfinite(s2_cloudy),
+#                 "s2_clean": _count_nonfinite(s2_clean),
+#                 "condition": _count_nonfinite(condition),
+#                 "sar": _count_nonfinite(sar),
+#             }
+#             bad_inputs = {name: count for name, count in bad_inputs.items() if count > 0}
+#             if bad_inputs:
+#                 skipped_batches += 1
+#                 print(f"[WARN] Batch {batch_idx}: valores no finitos en inputs -> {bad_inputs}. Se omite.")
+#                 continue
 
-    with torch.no_grad():
-        for batch_idx, batch in enumerate(tqdm(loader, desc="Evaluando", unit="batch"), start=1):
-            s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
+#             pred = inference(model, s2_cloudy, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k).clamp(0, 1)
 
-            bad_inputs = {
-                "s2_cloudy": _count_nonfinite(s2_cloudy),
-                "s2_clean": _count_nonfinite(s2_clean),
-                "condition": _count_nonfinite(condition),
-                "sar": _count_nonfinite(sar),
-            }
-            bad_inputs = {name: count for name, count in bad_inputs.items() if count > 0}
-            if bad_inputs:
-                skipped_batches += 1
-                print(f"[WARN] Batch {batch_idx}: valores no finitos en inputs -> {bad_inputs}. Se omite.")
-                continue
+#             bad_pred = _count_nonfinite(pred)
+#             if bad_pred > 0:
+#                 skipped_batches += 1
+#                 print(f"[WARN] Batch {batch_idx}: predicción con {bad_pred} valores no finitos. Se omite.")
+#                 continue
 
-            pred = inference(model, s2_cloudy, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k).clamp(0, 1)
+#             total_mae  += mae(pred, s2_clean)
+#             total_psnr += psnr(pred, s2_clean)
+#             total_ssim += ssim(pred, s2_clean)
+#             total_sam  += sam(pred, s2_clean)
+#             n_batches  += 1
 
-            bad_pred = _count_nonfinite(pred)
-            if bad_pred > 0:
-                skipped_batches += 1
-                print(f"[WARN] Batch {batch_idx}: predicción con {bad_pred} valores no finitos. Se omite.")
-                continue
+#     if n_batches == 0:
+#         raise RuntimeError("No hubo batches válidos para calcular métricas.")
 
-            total_mae  += mae(pred, s2_clean)
-            total_psnr += psnr(pred, s2_clean)
-            total_ssim += ssim(pred, s2_clean)
-            total_sam  += sam(pred, s2_clean)
-            n_batches  += 1
+#     metrics = {"mae": float(total_mae/n_batches), "psnr": float(total_psnr/n_batches), "ssim": float(total_ssim/n_batches), "sam": float(total_sam/n_batches)}
 
-    if n_batches == 0:
-        raise RuntimeError("No hubo batches válidos para calcular métricas.")
+#     print(f"\n{'='*40}")
+#     print(f"  MAE  : {metrics['mae']:.6f}")
+#     print(f"  PSNR : {metrics['psnr']:.4f} dB")
+#     print(f"  SSIM : {metrics['ssim']:.6f}")
+#     print(f"  SAM  : {metrics['sam']:.4f} °")
+#     print(f"  Batches válidos: {n_batches}")
+#     print(f"  Batches omitidos: {skipped_batches}")
+#     print(f"{'='*40}\n")
 
-    metrics = {"mae": float(total_mae/n_batches), "psnr": float(total_psnr/n_batches), "ssim": float(total_ssim/n_batches), "sam": float(total_sam/n_batches)}
-
-    print(f"\n{'='*40}")
-    print(f"  MAE  : {metrics['mae']:.6f}")
-    print(f"  PSNR : {metrics['psnr']:.4f} dB")
-    print(f"  SSIM : {metrics['ssim']:.6f}")
-    print(f"  SAM  : {metrics['sam']:.4f} °")
-    print(f"  Batches válidos: {n_batches}")
-    print(f"  Batches omitidos: {skipped_batches}")
-    print(f"{'='*40}\n")
-
-    return metrics
-
+#     return metrics
 
 # ── Registro de resultados ──────────────────────────────────────────────
 
@@ -146,29 +140,20 @@ if __name__ == "__main__":
     print(f"Device: {device} | SAR: {sar_mode} | split: {args.split} | steps: {args.steps}")
 
     loaded = download_model(repo_id=repo_id, filename=save_filename, map_location=device)
-    checkpoint = (
-       loaded["model_state_dict"]
-       if isinstance(loaded, dict) and "model_state_dict" in loaded
-       else loaded
-   )
+    checkpoint = (loaded["model_state_dict"] if isinstance(loaded, dict) and "model_state_dict" in loaded else loaded)
 
     image_channels     = 6
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     model = DBCRSimple(image_channels=image_channels, condition_channels=condition_channels, base_channels=64, time_dim=128, control_net=(sar_mode == "ControlNet"))
     if sar_mode != "ControlNet":
-        checkpoint = {
-            k: v for k, v in checkpoint.items()
-            if not k.startswith("control_net.")
-        }
+        checkpoint = {k: v for k, v in checkpoint.items() if not k.startswith("control_net.")}
     model.load_state_dict(checkpoint, strict=True)
     model = model.float().to(device)
-
-    
 
     ds = SEN12MSCRDataset(split=args.split, include_s1=(sar_mode != "None"), include_mask=False)
     loader = DataLoader(ds, batch_size=batch_size, shuffle=False, num_workers=cfg["train"]["num_workers"])
 
-    metrics = evaluate(model=model, loader=loader, sar_mode=sar_mode, device=device, T=T, steps=args.steps, sigmoid_k=sigmoid_k)
+    metrics = evaluate(inference=inference, model=model, loader=loader, sar_mode=sar_mode, device=device, T=T, steps=args.steps, sigmoid_k=sigmoid_k)
 
     register_eval(filename=save_filename, metrics=metrics, split=args.split, sar_mode=sar_mode, steps=args.steps, yaml_path="eval/results.yaml")
