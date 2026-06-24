@@ -78,7 +78,7 @@ def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
             num_batches += 1
             avg_loss = epoch_loss / num_batches
             progress_bar.set_postfix({"loss": f"{loss:.6f}", "avg_loss": f"{avg_loss:.6f}"})
-            # break
+            break
 
         avg_loss = epoch_loss / num_batches
         history["train_loss"].append(avg_loss)

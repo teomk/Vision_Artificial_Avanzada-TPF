@@ -163,3 +163,23 @@ models:
         psnr: 28.1349
         ssim: 0.830156
         sam: 10.3902
+    dbcr_complex_v5:
+      filename: dbcr_complex_v5.pth
+      eval:
+        split: test
+        date: '2026-06-24'
+        steps: 10
+        mae: 0.029303
+        psnr: 27.2085
+        ssim: 0.834395
+        sam: 10.887
+    dbcr_complex_v6:
+      filename: dbcr_complex_v6.pth
+      eval:
+        split: test
+        date: '2026-06-24'
+        steps: 10
+        mae: 0.036594
+        psnr: 25.8165
+        ssim: 0.775272
+        sam: 12.1139
