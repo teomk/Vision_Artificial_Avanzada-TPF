@@ -115,7 +115,7 @@ def register_eval(filename, metrics, split, sar_mode, steps, yaml_path="eval/res
     print(f"Guardado en {yaml_path}")
 
 if __name__ == "__main__":
-    # python eval_dbcr_complex.py --config configs/dbcr_complex.yaml
+    # python eval/eval_dbcr_complex.py --config configs/dbcr_complex.yaml
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
     parser.add_argument("--split", default="test", choices=["train", "test"])

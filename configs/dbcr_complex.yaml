@@ -11,7 +11,7 @@ train:
   sigmoid_k: 10.0
   load_filename: "None"  # entrenar desde cero
   # resume_filename: "dbcr_complex_v3.pth"
-  resume_filename: "dbcr_complex_v4.pth"
+  resume_filename: "dbcr_complex_v7.pth"
 
 model_args:
   image_channels: 6
@@ -28,6 +28,6 @@ model_args:
 
 huggingface:
   repo_id: "LucioLuque/lama"
-  save_filename: "dbcr_complex_v7.pth"
-  version: 7
-  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8, checkpoint ON, sin encoder_4. CON 6 BANDAS + 15 epocas + 15 epocas + 15 epocas, es decir 60 epocas. Parte desde complex v4 que fueron 45."
+  save_filename: "dbcr_complex_v8.pth"
+  version: 8
+  notes: "DBCR con NAFBlocks + SFBlocks (cross-attention SAR), window sf0=8, checkpoint ON, sin encoder_4. CON 6 BANDAS + 15 epocas + 15 epocas + 15 epocas + 15 epocas, es decir 75 epocas. Parte desde complex v7 que fueron 60."
