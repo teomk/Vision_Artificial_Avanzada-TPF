@@ -1,28 +1,28 @@
 {
   "votes": {
-    "DBCR": 1
+    "DBCR": 3
   },
   "rankings": {
     "DBCR": {
-      "rank_1": 1,
+      "rank_1": 3,
       "rank_2": 0,
       "rank_3": 0
     },
     "DBCR-SC (sin TL)": {
       "rank_1": 0,
-      "rank_2": 1,
+      "rank_2": 3,
       "rank_3": 0
     },
     "DBCR-S": {
       "rank_1": 0,
       "rank_2": 0,
-      "rank_3": 1
+      "rank_3": 3
     }
   },
   "points": {
-    "DBCR": 3,
-    "DBCR-SC (sin TL)": 2,
-    "DBCR-S": 1
+    "DBCR": 9,
+    "DBCR-SC (sin TL)": 6,
+    "DBCR-S": 3
   },
   "sessions": [
     {
@@ -32,14 +32,48 @@
         "DBCR-S"
       ],
       "order": [
-        "DBCR",
+        "DBCR-SC (sin TL)",
         "DBCR-S",
-        "DBCR-SC (sin TL)"
+        "DBCR"
       ],
       "psnr": {
-        "DBCR-S": 21.6352,
-        "DBCR-SC (sin TL)": 23.4852,
-        "DBCR": 23.1067
+        "DBCR-S": 21.0893,
+        "DBCR-SC (sin TL)": 24.7164,
+        "DBCR": 26.007
+      }
+    },
+    {
+      "ranking": [
+        "DBCR",
+        "DBCR-SC (sin TL)",
+        "DBCR-S"
+      ],
+      "order": [
+        "DBCR-SC (sin TL)",
+        "DBCR-S",
+        "DBCR"
+      ],
+      "psnr": {
+        "DBCR-S": 20.2134,
+        "DBCR-SC (sin TL)": 22.6706,
+        "DBCR": 24.0041
+      }
+    },
+    {
+      "ranking": [
+        "DBCR",
+        "DBCR-SC (sin TL)",
+        "DBCR-S"
+      ],
+      "order": [
+        "DBCR-S",
+        "DBCR-SC (sin TL)",
+        "DBCR"
+      ],
+      "psnr": {
+        "DBCR-S": 21.3442,
+        "DBCR-SC (sin TL)": 24.6913,
+        "DBCR": 25.3073
       }
     }
   ]

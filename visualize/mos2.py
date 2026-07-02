@@ -26,9 +26,20 @@ from dbcr_utils import inference
 from dataset_utils import unpack_batch
 from evaluate_utils import psnr
 
-S2_PATH      = ROOT / "visualize" / "s2_6bands.npy"
-S1_PATH      = ROOT / "visualize" / "s1_2bands.npy"
-RESULTS_PATH = ROOT / "visualize" / "mos_results.json"
+S2_PATH           = ROOT / "visualize" / "s2_6bands.npy"
+S1_PATH           = ROOT / "visualize" / "s1_2bands.npy"
+RESULTS_PATH      = ROOT / "visualize" / "mos_results.json"
+CACHE_DIR         = ROOT / "visualize" / "inference_cache"
+CLOUDY_IMAGES_DIR = ROOT / "visualize"
+
+# Crear directorio de caché si no existe
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+CLOUDY_IMAGES = {
+    "Cloudy 01": CLOUDY_IMAGES_DIR / "s2_6bands_cloudy_01.npy",
+    "Cloudy 02": CLOUDY_IMAGES_DIR / "s2_6bands_cloudy_02.npy",
+    "Cloudy 03": CLOUDY_IMAGES_DIR / "s2_6bands_cloudy_03.npy",
+}
 
 REPO_ID   = "LucioLuque/lama"
 T         = 1000
@@ -145,8 +156,49 @@ def load_models(device):
     return {
         "DBCR-S":           (load_simple("dbcr_no_sar_naf_v2.pth", "None"),      "None",       "simple"),
         "DBCR-SC (sin TL)": (load_simple("dbcr_concat_v2.pth",     "Concat"),    "Concat",     "simple"),
-        "DBCR":             (load_complex("dbcr_complex_v4.pth"),                 "ControlNet", "complex"),
+        "DBCR":             (load_complex("dbcr_complex_v7.pth"),                 "ControlNet", "complex"),
     }
+
+# ── Caché de inferencias ──────────────────────────────────────────
+
+def get_cache_path(image_name):
+    """Retorna el directorio de caché para una imagen específica."""
+    cache_subdir = CACHE_DIR / image_name.replace(" ", "_")
+    cache_subdir.mkdir(parents=True, exist_ok=True)
+    return cache_subdir
+
+def save_predictions_cache(image_name, preds, psnr_values):
+    """Guarda las predicciones en caché."""
+    cache_path = get_cache_path(image_name)
+    
+    for model_name, pred_tensor in preds.items():
+        pred_file = cache_path / f"{model_name.replace(' ', '_')}_pred.pt"
+        torch.save(pred_tensor, pred_file)
+    
+    psnr_file = cache_path / "psnr_values.pt"
+    torch.save(psnr_values, psnr_file)
+    
+    print(f"✓ Predicciones guardadas en caché: {cache_path}")
+
+def load_predictions_cache(image_name):
+    """Carga las predicciones desde caché si existen."""
+    cache_path = get_cache_path(image_name)
+    
+    psnr_file = cache_path / "psnr_values.pt"
+    if not psnr_file.exists():
+        return None, None
+    
+    preds = {}
+    model_files = list(cache_path.glob("*_pred.pt"))
+    
+    for pred_file in model_files:
+        model_name = pred_file.stem.replace("_pred", "").replace("_", " ")
+        preds[model_name] = torch.load(pred_file, map_location="cpu")
+    
+    psnr_values = torch.load(psnr_file, map_location="cpu")
+    
+    print(f"✓ Predicciones cargadas desde caché: {cache_path}")
+    return preds, psnr_values
 
 def run_inference(model, model_type, sar_mode, cloudy_t, s1_t, device):
     cloudy_b = cloudy_t.unsqueeze(0).float().to(device)
@@ -174,8 +226,15 @@ def run_inference(model, model_type, sar_mode, cloudy_t, s1_t, device):
 
 def load_results():
     if RESULTS_PATH.exists():
-        with open(RESULTS_PATH) as f:
-            results = json.load(f)
+        try:
+            with open(RESULTS_PATH) as f:
+                content = f.read()
+                if content.strip():
+                    results = json.loads(content)
+                else:
+                    results = {}
+        except (json.JSONDecodeError, IOError):
+            results = {}
     else:
         results = {}
 
@@ -207,10 +266,11 @@ class MOSApp:
         self.clean_rgb_np  = to_rgb_np(self.s2_clean_norm)
         self.sar_gray_np   = to_sar_np(self.s1_raw, band=0)
 
-        self.cloud_alpha   = None
+        self.selected_image_name = None
         self.cloudy_norm   = None
         self.preds         = None
         self.order         = None
+        self.psnr_values   = None
 
         # Ranking manual: clic 1 = puesto 1, clic 2 = puesto 2, clic 3 = puesto 3
         self.current_ranking = []
@@ -259,100 +319,141 @@ class MOSApp:
         for w in self.frame_canvas.winfo_children(): w.destroy()
         for w in self.frame_bottom.winfo_children(): w.destroy()
 
-    # ── FASE 1: generar nube ──────────────────────────────────────────
+    # ── FASE 1: seleccionar imagen ────────────────────────────────────
 
     def _show_phase1(self):
         self._clear_canvas()
-        self.label_info.config(text="Ajustá los parámetros y generá una nube. Luego presioná 'Generar predicciones'.")
+        self.label_info.config(text="Selecciona una imagen nublada. Luego presioná 'Generar/Cargar predicciones'.")
 
-        # Panel izquierdo: controles
+        # Panel izquierdo: selección de imagen
         left = tk.Frame(self.frame_canvas)
         left.grid(row=0, column=0, padx=10, pady=10, sticky="n")
 
-        tk.Label(left, text="Cobertura:", font=("Arial", 10)).pack(anchor="w")
-        self.coverage_var = tk.DoubleVar(value=0.4)
-        tk.Scale(left, from_=0.05, to=0.95, resolution=0.05, orient="horizontal",
-                 variable=self.coverage_var, length=200).pack()
+        tk.Label(left, text="Selecciona imagen:", font=("Arial", 11, "bold")).pack(anchor="w", pady=(0, 10))
 
-        tk.Label(left, text="Escala (tamaño de la nube):", font=("Arial", 10)).pack(anchor="w", pady=(8,0))
-        self.scale_var = tk.DoubleVar(value=80.0)
-        tk.Scale(left, from_=20, to=200, resolution=5, orient="horizontal",
-                 variable=self.scale_var, length=200).pack()
+        self.selected_button = None
+        
+        for image_name in CLOUDY_IMAGES.keys():
+            btn = tk.Button(
+                left, 
+                text=image_name, 
+                command=lambda name=image_name: self._select_image(name),
+                width=18, 
+                bg="#95a5a6", 
+                fg="white", 
+                font=("Arial", 10),
+                height=2
+            )
+            btn.pack(pady=6)
+            btn.image_name = image_name
 
-        tk.Button(left, text="🎲 Nueva nube", command=self._generate_cloud,
-                  width=20, bg="#4a90d9", fg="white", font=("Arial", 10)).pack(pady=10)
-
-        tk.Button(left, text="Generar predicciones →", command=self._run_predictions,
-                  width=20, bg="#27ae60", fg="white", font=("Arial", 10)).pack(pady=4)
+        tk.Button(
+            left, 
+            text="Generar/Cargar →", 
+            command=self._run_predictions,
+            width=20, 
+            bg="#27ae60", 
+            fg="white", 
+            font=("Arial", 10),
+            height=2
+        ).pack(pady=16)
 
         # Panel derecho: preview
         right = tk.Frame(self.frame_canvas)
         right.grid(row=0, column=1, padx=10, pady=10)
 
         tk.Label(right, text="Preview", font=("Arial", 10, "bold")).pack()
-        self.preview_label = tk.Label(right)
-        self.preview_label.pack()
+        self.preview_label = tk.Label(right, bg="#f0f0f0")
+        self.preview_label.pack(pady=4)
 
-        self._generate_cloud()
-
-    def _generate_cloud(self):
-        threshold = 1.0 - self.coverage_var.get()
-        scale     = self.scale_var.get()
-        self.cloud_alpha = generate_cloud_mask(size=IMG_SIZE, scale=scale, threshold=threshold)
-
-        # Preview: imagen limpia + nube encima
-        cloudy_preview     = apply_cloud(self.s2_clean_norm, self.cloud_alpha)
-        cloudy_preview_rgb = to_rgb_np(cloudy_preview)
-
-        img    = Image.fromarray(cloudy_preview_rgb)
+    def _select_image(self, image_name):
+        """Selecciona una imagen nublada y muestra su preview."""
+        self.selected_image_name = image_name
+        
+        # Actualizar UI: resaltar botón seleccionado
+        for widget in self.frame_canvas.winfo_children():
+            if isinstance(widget, tk.Frame):
+                for btn in widget.winfo_children():
+                    if isinstance(btn, tk.Button) and hasattr(btn, 'image_name'):
+                        if btn.image_name == image_name:
+                            btn.config(bg="#27ae60")
+                        else:
+                            btn.config(bg="#95a5a6")
+        
+        # Cargar y mostrar preview
+        image_path = CLOUDY_IMAGES[image_name]
+        cloudy_raw = np.load(image_path)
+        cloudy_norm = normalize_s2(cloudy_raw)
+        cloudy_rgb = to_rgb_np(cloudy_norm)
+        
+        img = Image.fromarray(cloudy_rgb)
+        img = img.resize((512, 512), Image.Resampling.LANCZOS)
         tk_img = ImageTk.PhotoImage(img)
         self.preview_label.config(image=tk_img)
         self.preview_label.image = tk_img
 
-    # ── FASE 2: inferencia ────────────────────────────────────────────
+    # ── FASE 2: inferencia (con caché) ────────────────────────────────
 
     def _run_predictions(self):
-        if self.cloud_alpha is None or self.cloud_alpha.sum() == 0:
-            messagebox.showwarning("Sin nube", "Generá una nube primero.")
+        if self.selected_image_name is None:
+            messagebox.showwarning("Sin imagen", "Selecciona una imagen primero.")
             return
 
-        self.label_info.config(text="Generando predicciones, esperá...")
+        self.label_info.config(text="Verificando caché e iniciando predicciones...")
         self.root.update()
 
-        self.cloudy_norm = apply_cloud(self.s2_clean_norm, self.cloud_alpha)
-        cloudy_t         = torch.from_numpy(self.cloudy_norm)
-        s1_t             = torch.from_numpy(self.s1_norm)
-        clear_t          = torch.from_numpy(self.s2_clean_norm)
+        # Cargar imagen seleccionada
+        image_path = CLOUDY_IMAGES[self.selected_image_name]
+        cloudy_raw = np.load(image_path)
+        self.cloudy_norm = normalize_s2(cloudy_raw)
+        
+        # Intentar cargar desde caché
+        cached_preds, cached_psnr = load_predictions_cache(self.selected_image_name)
+        
+        if cached_preds is not None and cached_psnr is not None:
+            # Usar caché
+            self.preds = cached_preds
+            self.psnr_values = cached_psnr
+            self.label_info.config(text="✓ Predicciones cargadas desde caché")
+            self.root.update_idletasks()
+        else:
+            # Generar predicciones
+            cloudy_t = torch.from_numpy(self.cloudy_norm)
+            s1_t = torch.from_numpy(self.s1_norm)
+            clear_t = torch.from_numpy(self.s2_clean_norm)
 
-        self.preds = {}
-        model_items = list(self.models.items())
-        total_models = len(model_items)
-        start_time = time.perf_counter()
+            self.preds = {}
+            model_items = list(self.models.items())
+            total_models = len(model_items)
+            start_time = time.perf_counter()
 
-        with torch.no_grad():
-            for index, (name, (model, sar_mode, mtype)) in enumerate(model_items, start=1):
-                self.label_info.config(
-                    text=f"Generando predicciones... {index}/{total_models}"
-                )
-                self.root.update_idletasks()
-
-                self.preds[name] = run_inference(model, mtype, sar_mode, cloudy_t, s1_t, self.device)
-
-                elapsed = time.perf_counter() - start_time
-                remaining = (elapsed / index) * (total_models - index) if index else 0.0
-                self.label_info.config(
-                    text=(
-                        f"Generando predicciones... {index}/{total_models} | "
-                        f"transcurrido {format_seconds(elapsed)} | "
-                        f"restante aprox. {format_seconds(remaining)}"
+            with torch.no_grad():
+                for index, (name, (model, sar_mode, mtype)) in enumerate(model_items, start=1):
+                    self.label_info.config(
+                        text=f"Generando predicciones... {index}/{total_models}"
                     )
-                )
-                self.root.update_idletasks()
+                    self.root.update_idletasks()
 
-        self.psnr_values = {
-            name: psnr(pred.unsqueeze(0), clear_t.unsqueeze(0))
-            for name, pred in self.preds.items()
-        }
+                    self.preds[name] = run_inference(model, mtype, sar_mode, cloudy_t, s1_t, self.device)
+
+                    elapsed = time.perf_counter() - start_time
+                    remaining = (elapsed / index) * (total_models - index) if index else 0.0
+                    self.label_info.config(
+                        text=(
+                            f"Generando predicciones... {index}/{total_models} | "
+                            f"transcurrido {format_seconds(elapsed)} | "
+                            f"restante aprox. {format_seconds(remaining)}"
+                        )
+                    )
+                    self.root.update_idletasks()
+
+            self.psnr_values = {
+                name: psnr(pred.unsqueeze(0), clear_t.unsqueeze(0))
+                for name, pred in self.preds.items()
+            }
+            
+            # Guardar en caché
+            save_predictions_cache(self.selected_image_name, self.preds, self.psnr_values)
 
         self.order = list(self.preds.keys())
         random.shuffle(self.order)
