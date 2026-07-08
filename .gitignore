@@ -1,10 +1,8 @@
 data/
-big-lama/
 *.pth
 *.ckpt
 *.pt
 *.safetensors
-external/lama/
 visualize/review_dbcr_complex_v7/
 __pycache__/
 .opencode

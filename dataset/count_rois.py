@@ -2,8 +2,6 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 
-#run --> python dataset/count_rois.py
-
 SEASONS = {"spring", "summer", "fall", "autumn", "winter"}
 ROOT    = Path(__file__).resolve().parent.parent
 

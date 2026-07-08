@@ -56,9 +56,6 @@ def evaluate(model, loader, sar_mode, device, scheduler, steps=50):
 
     return metrics
 
-
-# ── Registro de resultados ──────────────────────────────────────────────
-
 def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/results.yaml"):
     yaml_path = Path(yaml_path)
     yaml_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +63,7 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
     if "models" not in data:
         data["models"] = {}
 
-    mkey = f"ddpm_{sar_mode.lower()}"   # "ddpm_none" | "ddpm_concat" | "ddpm_controlnet"
+    mkey = f"ddpm_{sar_mode.lower()}"
     if mkey not in data["models"]:
         data["models"][mkey] = {}
 
@@ -99,8 +96,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Evaluar ConditionalDDPMUNet (None | Concat | ControlNet)")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
-    parser.add_argument("--split",  type=str, default="test", choices=["train", "test"], help="Split a evaluar (default: test)")
-    parser.add_argument("--steps",  type=int, default=10, help="Pasos de inferencia DDPM (default: 50)")
+    parser.add_argument("--split",  type=str, default="test", choices=["train", "test"], help="Split a evaluar")
+    parser.add_argument("--steps",  type=int, default=10, help="Pasos de inferencia DDPM")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:

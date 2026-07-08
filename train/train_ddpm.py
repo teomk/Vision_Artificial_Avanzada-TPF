@@ -23,10 +23,6 @@ from ddpm_utils import build_sigmoid_ddpm_scheduler
 from dataset_utils import unpack_batch
 from dataset import SEN12MSCRDataset
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Train step
-# ──────────────────────────────────────────────────────────────────────────────
-
 def run(model, batch, optimizer, device, sar_mode, noise_scheduler):
     model.train()
 
@@ -34,11 +30,9 @@ def run(model, batch, optimizer, device, sar_mode, noise_scheduler):
 
     B = s2_clean.shape[0]
 
-    # Ruido gaussiano y timesteps aleatorios
     noise = torch.randn_like(s2_clean)
     t     = torch.randint(low=1, high=noise_scheduler.config.num_train_timesteps, size=(B,), device=device)
 
-    # Forward: agregar ruido según el scheduler
     x_t = noise_scheduler.add_noise(s2_clean, noise, t)
 
     with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type=="cuda"):
@@ -52,11 +46,6 @@ def run(model, batch, optimizer, device, sar_mode, noise_scheduler):
 
     return loss.item()
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Fit loop
-# ──────────────────────────────────────────────────────────────────────────────
-
 def fit(model, train_loader, lr, device, sar_mode, noise_scheduler, num_epochs=50):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=2)
@@ -65,18 +54,10 @@ def fit(model, train_loader, lr, device, sar_mode, noise_scheduler, num_epochs=5
     for epoch in range(num_epochs):
         epoch_loss  = 0.0
         num_batches = 0
-        progress_bar = tqdm(
-            train_loader,
-            desc=f"Época {epoch+1}/{num_epochs}",
-            unit="batch"
-        )
+        progress_bar = tqdm(train_loader, desc=f"Época {epoch+1}/{num_epochs}", unit="batch")
 
         for batch in progress_bar:
-            loss = run(
-                model=model, batch=batch, optimizer=optimizer,
-                device=device, sar_mode=sar_mode,
-                noise_scheduler=noise_scheduler,
-            )
+            loss = run(model=model, batch=batch, optimizer=optimizer, device=device, sar_mode=sar_mode, noise_scheduler=noise_scheduler)
             epoch_loss  += loss
             num_batches += 1
             avg_loss = epoch_loss / num_batches
@@ -91,11 +72,6 @@ def fit(model, train_loader, lr, device, sar_mode, noise_scheduler, num_epochs=5
         scheduler.step(avg_loss)
 
     return history
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Main
-# ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     # python train/train_ddpm.py --config configs/ddpm_none.yaml
@@ -135,98 +111,85 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | sar_mode: {sar_mode} | condition_channels: {condition_channels} | Epochs: {num_epochs}")
 
-    # Noise scheduler — sigmoid beta schedule
     sigmoid_k = cfg_train.get("sigmoid_k", 25.0)
     alpha_min = cfg_train.get("alpha_min", 0.0001)
 
-    noise_scheduler = build_sigmoid_ddpm_scheduler(
-        T=T,
-        sigmoid_k=sigmoid_k,
-        alpha_min=alpha_min
+    noise_scheduler = build_sigmoid_ddpm_scheduler(T=T, sigmoid_k=sigmoid_k, alpha_min=alpha_min)
+
+    # Dataset
+    ds_train = SEN12MSCRDataset(split="train", include_s1=(sar_mode != "None"), include_mask=False)
+    loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"))
+
+    # Modelo
+    model = ConditionalDDPMUNet(
+        image_channels=image_channels,
+        condition_channels=condition_channels,
+        base_channels=base_channels,
+        time_dim=time_dim,
+    ).to(device)
+
+    if load_filename is not None:
+        checkpoint = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
+        model.load_state_dict(checkpoint, strict=False)
+        print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
+
+    parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Parámetros entrenables: {parameters:,}")
+
+    history = fit(
+        model=model,
+        train_loader=loader_train,
+        lr=lr,
+        device=device,
+        sar_mode=sar_mode,
+        noise_scheduler=noise_scheduler,
+        num_epochs=num_epochs,
     )
 
-    # # Dataset
-    # ds_train = SEN12MSCRDataset(
-    #     split="train",
-    #     include_s1=(sar_mode != "None"),
-    #     include_mask=False
-    # )
-    # loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"))
+    upload_model(
+        model_state_dict=model.state_dict(),
+        repo_id=repo_id,
+        filename=save_filename,
+    )
 
-    # # Modelo
-    # model = ConditionalDDPMUNet(
-    #     image_channels=image_channels,
-    #     condition_channels=condition_channels,
-    #     base_channels=base_channels,
-    #     time_dim=time_dim,
-    # ).to(device)
+    register_version(
+        repo_id=repo_id,
+        version=version,
+        filename=save_filename,
+        base_model=cfg_hf.get("base_model", save_filename),
+        sar_mode=sar_mode,
+        phase1_info={
+            "num_epochs": num_epochs, "lr": lr,
+            "T": T, "sigmoid": sigmoid_k, "alpha_min": alpha_min,
+            "batch_size": batch_size, "num_weights": parameters,
+            "sar_mode": sar_mode,
+        },
+        phase2_info={ #cuando probamos lama teniamos dos fases, quedo de ahi
+            "Nada": 0
+        },
+        notes=notes,
+    )
 
-    # if load_filename is not None:
-    #     checkpoint = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
-    #     model.load_state_dict(checkpoint, strict=False)
-    #     print(f"Modelo cargado desde HuggingFace: {repo_id}/{load_filename}")
+    history_data = {
+        "train_loss": history["train_loss"],
+        "config": {
+            "num_epochs": num_epochs,
+            "lr": lr,
+            "batch_size": batch_size,
+            "T": T,
+            "beta_schedule": "sigmoid",
+            "sar_mode": sar_mode,
+            "num_parameters": parameters,
+        }
+    }
 
-    # parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    # print(f"Parámetros entrenables: {parameters:,}")
+    history_dir = ROOT / "training_history"
+    history_dir.mkdir(parents=True, exist_ok=True)
 
-    # # Entrenar
-    # history = fit(
-    #     model=model,
-    #     train_loader=loader_train,
-    #     lr=lr,
-    #     device=device,
-    #     sar_mode=sar_mode,
-    #     noise_scheduler=noise_scheduler,
-    #     num_epochs=num_epochs,
-    # )
+    history_filename = save_filename.replace(".pth", "_history.yaml")
+    history_path     = history_dir / history_filename
 
-    # # Subir a HuggingFace
-    # upload_model(
-    #     model_state_dict=model.state_dict(),
-    #     repo_id=repo_id,
-    #     filename=save_filename,
-    # )
+    with open(history_path, "w") as f:
+        yaml.safe_dump(history_data, f, sort_keys=False)
 
-    # # Registrar versión
-    # register_version(
-    #     repo_id=repo_id,
-    #     version=version,
-    #     filename=save_filename,
-    #     base_model=cfg_hf.get("base_model", save_filename),
-    #     sar_mode=sar_mode,
-    #     phase1_info={
-    #         "num_epochs": num_epochs, "lr": lr,
-    #         "T": T, "sigmoid": sigmoid_k, "alpha_min": alpha_min,
-    #         "batch_size": batch_size, "num_weights": parameters,
-    #         "sar_mode": sar_mode,
-    #     },
-    #     phase2_info={
-    #         "Nada": 0
-    #     },
-    #     notes=notes,
-    # )
-
-    # # Guardar history local
-    # history_data = {
-    #     "train_loss": history["train_loss"],
-    #     "config": {
-    #         "num_epochs": num_epochs,
-    #         "lr": lr,
-    #         "batch_size": batch_size,
-    #         "T": T,
-    #         "beta_schedule": "sigmoid",
-    #         "sar_mode": sar_mode,
-    #         "num_parameters": parameters,
-    #     }
-    # }
-
-    # history_dir = ROOT / "training_history"
-    # history_dir.mkdir(parents=True, exist_ok=True)
-
-    # history_filename = save_filename.replace(".pth", "_history.yaml")
-    # history_path     = history_dir / history_filename
-
-    # with open(history_path, "w") as f:
-    #     yaml.safe_dump(history_data, f, sort_keys=False)
-
-    # print(f"History guardado en: {history_path}")
+    print(f"History guardado en: {history_path}")

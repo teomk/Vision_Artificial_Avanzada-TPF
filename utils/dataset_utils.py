@@ -1,13 +1,6 @@
 import torch
 
 def unpack_batch(batch, sar_mode, device):
-    """
-    Retorna:
-        s2_cloudy  [B, 6, H, W]
-        s2_clean   [B, 6, H, W]
-        condition  [B, 6 o 8, H, W]
-        sar        [B, 2, H, W] o None
-    """
     if sar_mode == "None":
         s2_cloudy, s2_clean = batch
         s2_cloudy = s2_cloudy.to(device)

@@ -20,65 +20,8 @@ sys.path.append(str(UTILS_DIR))
 from dataset import SEN12MSCRDataset
 from dbcr_simple import DBCRSimple
 from hf_utils import download_model
-# from dataset_utils import unpack_batch
-# from metrics import mae, psnr, ssim, sam
-# from evaluate_utils import _count_nonfinite
 from dbcr_utils import inference
 from evaluate_utils import evaluate
-
-# def evaluate(model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
-#     model.eval()
-#     total_mae = total_psnr = total_ssim = total_sam = 0.0
-#     n_batches = 0
-#     skipped_batches = 0
-
-#     with torch.no_grad():
-#         for batch_idx, batch in enumerate(tqdm(loader, desc="Evaluando", unit="batch"), start=1):
-#             s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
-
-#             bad_inputs = {
-#                 "s2_cloudy": _count_nonfinite(s2_cloudy),
-#                 "s2_clean": _count_nonfinite(s2_clean),
-#                 "condition": _count_nonfinite(condition),
-#                 "sar": _count_nonfinite(sar),
-#             }
-#             bad_inputs = {name: count for name, count in bad_inputs.items() if count > 0}
-#             if bad_inputs:
-#                 skipped_batches += 1
-#                 print(f"[WARN] Batch {batch_idx}: valores no finitos en inputs -> {bad_inputs}. Se omite.")
-#                 continue
-
-#             pred = inference(model, s2_cloudy, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k).clamp(0, 1)
-
-#             bad_pred = _count_nonfinite(pred)
-#             if bad_pred > 0:
-#                 skipped_batches += 1
-#                 print(f"[WARN] Batch {batch_idx}: predicción con {bad_pred} valores no finitos. Se omite.")
-#                 continue
-
-#             total_mae  += mae(pred, s2_clean)
-#             total_psnr += psnr(pred, s2_clean)
-#             total_ssim += ssim(pred, s2_clean)
-#             total_sam  += sam(pred, s2_clean)
-#             n_batches  += 1
-
-#     if n_batches == 0:
-#         raise RuntimeError("No hubo batches válidos para calcular métricas.")
-
-#     metrics = {"mae": float(total_mae/n_batches), "psnr": float(total_psnr/n_batches), "ssim": float(total_ssim/n_batches), "sam": float(total_sam/n_batches)}
-
-#     print(f"\n{'='*40}")
-#     print(f"  MAE  : {metrics['mae']:.6f}")
-#     print(f"  PSNR : {metrics['psnr']:.4f} dB")
-#     print(f"  SSIM : {metrics['ssim']:.6f}")
-#     print(f"  SAM  : {metrics['sam']:.4f} °")
-#     print(f"  Batches válidos: {n_batches}")
-#     print(f"  Batches omitidos: {skipped_batches}")
-#     print(f"{'='*40}\n")
-
-#     return metrics
-
-# ── Registro de resultados ──────────────────────────────────────────────
 
 def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/results.yaml"):
     yaml_path = Path(yaml_path)
@@ -87,7 +30,7 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
     if "models" not in data:
         data["models"] = {}
 
-    mkey = f"dbcr_{sar_mode.lower()}"   # "dbcr_none" | "dbcr_concat" | "dbcr_controlnet"
+    mkey = f"dbcr_{sar_mode.lower()}"
     if mkey not in data["models"]:
         data["models"][mkey] = {}
  
@@ -113,23 +56,20 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
     yaml_path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False))
     print(f"Métricas guardadas en {yaml_path} (models.{mkey}.{target_vkey}.eval)")
 
-
-# ── Main ───────────────────────────────────────────────────────────────
-
 if __name__ == "__main__":
     # python eval/eval_dbcr_simple.py --config configs/dbcr_no_sar.yaml
     # python eval/eval_dbcr_simple.py --config configs/dbcr_sar.yaml --split test --steps 10
     # python eval/eval_dbcr_simple.py --config configs/dbcr_controlnet.yaml
     parser = argparse.ArgumentParser(description="Evaluar DBCR (SAR o No-SAR)")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
-    parser.add_argument("--split", type=str, default="test", choices=["train", "test"], help="Split a evaluar (default: test)")
-    parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia iterativa (default: 10)")
+    parser.add_argument("--split", type=str, default="test", choices=["train", "test"], help="Split a evaluar")
+    parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia iterativa")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode = cfg["sar_mode"]  # "None" | "Concat" | "ControlNet"
+    sar_mode = cfg["sar_mode"]
     repo_id       = cfg["huggingface"]["repo_id"]
     save_filename = cfg["huggingface"]["save_filename"]
     T             = cfg["train"]["T"]

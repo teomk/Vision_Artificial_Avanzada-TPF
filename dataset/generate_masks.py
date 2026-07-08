@@ -1,3 +1,4 @@
+#Este archivo lo usamos para generar mascaras de nubes cuando estabamos probando adaptar lama, para el resto de modelos no se usaron.
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,11 +7,7 @@ import numpy as np
 import rasterio
 from skimage.filters import threshold_otsu
 
-# ─────────────────────────────────────────
-# CONFIG
-# ─────────────────────────────────────────
-
-OTSU_OFFSET = -0.03  # ajustá si querés más o menos nubes
+OTSU_OFFSET = -0.03
 
 SPLITS = {
     "train": {
@@ -23,12 +20,7 @@ SPLITS = {
     },
 }
 
-B03_IDX = 3  # banda verde, índice rasterio desde 1
-
-
-# ─────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────
+B03_IDX = 3
 
 def mask_filename(cloudy_name: str) -> str:
     """ROIs1158_spring_s2_cloudy_17_p30.tif → ROIs1158_spring_s2_mask_17_p30.tif"""
@@ -45,7 +37,6 @@ def generate_mask(tif_path: Path) -> tuple[np.ndarray, dict]:
 
     return cloud_mask, profile
 
-
 def save_mask(mask: np.ndarray, profile: dict, out_path: Path) -> None:
     profile.update(
         count=1,
@@ -55,18 +46,12 @@ def save_mask(mask: np.ndarray, profile: dict, out_path: Path) -> None:
     with rasterio.open(out_path, "w", **profile) as dst:
         dst.write(mask[np.newaxis, ...])  # [1, H, W]
 
-
-# ─────────────────────────────────────────
-# MAIN
-# ─────────────────────────────────────────
-
 def main() -> None:
     for split, paths in SPLITS.items():
         cloudy_folder = paths["cloudy"]
         masks_folder  = paths["masks"]
 
         if not cloudy_folder.exists():
-            print(f"[{split}] Carpeta no encontrada: {cloudy_folder} — saltando.")
             continue
 
         masks_folder.mkdir(parents=True, exist_ok=True)
@@ -97,11 +82,6 @@ def main() -> None:
             except Exception as e:
                 print(f"  ERROR en {tif_path.name}: {e}")
                 errors += 1
-
-        print(f"  Generadas: {ok} | Ya existían: {skipped} | Errores: {errors}")
-
-    print("\n✅ Máscaras generadas.")
-
 
 if __name__ == "__main__":
     main()

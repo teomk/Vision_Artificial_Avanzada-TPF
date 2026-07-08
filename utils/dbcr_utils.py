@@ -13,15 +13,7 @@ def make_bridge_sample(s2_clean, s2_cloudy, t, T, sigmoid_k, device):
     alpha_t = sigmoid_scheduler(T, sigmoid_k, t, device)
     return (1.0 - alpha_t) * s2_clean + alpha_t * s2_cloudy
 
-
-
-
 def inference(model, cloudy_b, condition, device, T=1000, steps=10, sar=None, sigmoid_k=10.0, show_progress: bool = False):
-    """
-    cloudy_b:  [1, 6, H, W] — solo S2, usado para el bridge (x_t)
-    condition: [1, 6, H, W] o [1, 8, H, W] — lo que recibe el modelo como s2_cloudy
-               (6ch para No-SAR, 8ch para SAR-concat)
-    """
     x_t = cloudy_b.clone()
     timesteps = torch.linspace(T, 1, steps).long().to(device)
     with torch.no_grad():

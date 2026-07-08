@@ -52,17 +52,11 @@ def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
     return loss.item()
 
 
-def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
-        start_epoch=0, num_epochs=50, T=1000, sigmoid_k=10.0, history=None):
-    """
-    start_epoch: índice (0-based) de la primera época a correr en esta llamada.
-    num_epochs:  cuántas épocas correr en esta llamada (no el total acumulado).
-    history:     dict previo a continuar, o None para arrancar de cero.
-    """
+def fit(model, train_loader, device, sar_mode, optimizer, scheduler, start_epoch=0, num_epochs=50, T=1000, sigmoid_k=10.0, history=None):
     if history is None:
         history = {"train_loss": []}
 
-    last_epoch = start_epoch - 1  # por si num_epochs == 0
+    last_epoch = start_epoch - 1
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
 
@@ -71,9 +65,7 @@ def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
         progress_bar = tqdm(train_loader, desc=f"Época {epoch+1}", unit="batch")
 
         for batch in progress_bar:
-            loss = run(model=model, batch=batch, optimizer=optimizer, device=device,
-                       sar_mode=sar_mode, T=T, sigmoid_k=sigmoid_k)
-
+            loss = run(model=model, batch=batch, optimizer=optimizer, device=device, sar_mode=sar_mode, T=T, sigmoid_k=sigmoid_k)
             epoch_loss += loss
             num_batches += 1
             avg_loss = epoch_loss / num_batches
@@ -104,7 +96,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Entrenar DBCR (SAR o No-SAR)")
     parser.add_argument(
         "--config", type=str, required=True,
-        help="Ruta al config YAML (e.g. configs/dbcr_no_sar.yaml)"
+        help="Ruta al config YAML"
     )
     args = parser.parse_args()
 
@@ -152,7 +144,7 @@ if __name__ == "__main__":
     history = {"train_loss": []}
     start_epoch = 0
 
-    if resume_filename is not None: # Continuar un entrenamiento anterior: model + optimizer + scheduler + epoch + history
+    if resume_filename is not None: # Continuar un entrenamiento anterior model, optimizer, scheduler, epoch y history
         ckpt = download_model(repo_id=repo_id, filename=resume_filename, map_location=device)
         model.load_state_dict(ckpt["model_state_dict"], strict=True)
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
@@ -160,7 +152,7 @@ if __name__ == "__main__":
         history = ckpt["history"]
         start_epoch = ckpt["epoch"] + 1
         print(f"Checkpoint completo cargado desde HF: {repo_id}/{resume_filename}")
-        print(f"Reanudando desde época {start_epoch + 1} (épocas previas: {start_epoch})")
+        print(f"desde época {start_epoch + 1} (épocas previas: {start_epoch})")
 
     elif load_filename is not None: # finetuning / transfer learning
         loaded = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
@@ -189,7 +181,7 @@ if __name__ == "__main__":
 
     if sar_mode == "ControlNet":
         model.freeze_unet()
-        print("UNet congelada. Solo se entrenará el ControlNet.")
+        print("UNet congelada. Solo se entren la ControlNet.")
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         controlnet_params = sum(p.numel() for p in model.control_net.parameters() if p.requires_grad)
         assert trainable_params == controlnet_params, f"Error: Se esperaban {controlnet_params} parámetros entrenables, pero se encontraron {trainable_params}."
@@ -222,7 +214,6 @@ if __name__ == "__main__":
     print(f"Checkpoint completo subido a HF: {repo_id}/{save_filename}")
     print(f"Épocas totales acumuladas: {total_epochs_completadas}")
 
-    # Registrar versión
     register_version(
         repo_id=repo_id,
         version=version,
@@ -235,7 +226,7 @@ if __name__ == "__main__":
             "T": T, "sigmoid_k": sigmoid_k,
             "batch_size": batch_size, "num_weights": parameters, "sar_mode": sar_mode
         },
-        phase2_info={
+        phase2_info={ #cuando probamos lama teniamos dos fases, quedo de ahi
             "num_epochs": 0, "lr": 0,
             "T": 0, "sigmoid_k": 0,
             "batch_size": 0, "num_weights": 0

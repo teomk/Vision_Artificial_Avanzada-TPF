@@ -1,9 +1,0 @@
-Cloud mask quality: Ensure the mask is aligned with S2 (same CRS, resolution, shape), is single-channel, and uses float [0,1] (or binary 0/1).
-Normalization: Normalize imagery consistently (recommend float32 scaled to [-1, 1] for images; masks in [0,1]). Apply same normalization to x_t, s2_cloudy and sar.
-Paired transforms: Any augmentation (flip/rotate/crop) must be applied identically to S2, mask, and SAR.
-Diffusion training pieces: Implement/verify noise schedule (betas), timestep sampling, MSE loss on predicted noise, optimizer, LR scheduler, EMA of weights, gradient clipping, and mixed-precision support (AMP) if desired.
-Training stages: Stage 1 — train U-Net (no SAR). Stage 2 — instantiate ControlNet, load stage-1 weights (strict=False if needed), call freeze_unet() (now keeps ControlNet trainable), and train ControlNet.
-Loss / metrics: Track reconstruction in masked regions (PSNR, SSIM, MAE) and overall metrics; evaluate on held-out cloudy scenes.
-Checkpointing & logging: Save periodic checkpoints, best-by-metric model, and logs (TensorBoard/Weights & Biases).
-Reproducibility: Set seeds and log environment (CUDA, PyTorch version).
-Resource plan: Choose batch size/accumulation to fit GPU memory; consider mixed precision and gradient accumulation.

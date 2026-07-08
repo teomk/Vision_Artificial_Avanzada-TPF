@@ -13,15 +13,12 @@ S1_TRAIN     = Path("data/train/south_america_s1")
 S2_TRAIN     = Path("data/train/south_america_s2")
 CLOUDY_TRAIN = Path("data/train/south_america_s2_cloudy")
 
-# Una adquisicion por season que se queda en test
 TEST_ACQUISITIONS = {
     "spring": "44",
     "summer": "146",
     "fall":   "85",
     "winter": "64",
 }
-
-
 def parse_filename(fname: str) -> tuple[str, str, str, str]:
     name = fname.replace(".tif", "")
     parts = name.split("_")

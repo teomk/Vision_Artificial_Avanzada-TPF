@@ -1,3 +1,4 @@
+#Config de un experimento, para cada uno de este modelo fuimos variando este archivo.
 sar_mode: "None"
 
 model: "ddpm"
@@ -16,4 +17,4 @@ huggingface:
   repo_id: "LucioLuque/lama"
   save_filename: "ddpm_none_v1.pth"
   version: 1
-  notes: "ConditionalDDPMUNet sin SAR. condition=S2 (6ch). sigmoid beta schedule."
+  notes: "ConditionalDDPMUNet sin SAR. condition=S2"

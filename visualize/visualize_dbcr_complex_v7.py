@@ -24,7 +24,6 @@ from dbcr_complex import DBCR
 from dbcr_simple import DBCRSimple
 from dbcr_utils import inference
 from hf_utils import download_model
-from evaluate_utils import psnr
 from visualize_utils import get_rgb_stats, to_rgb
 
 
@@ -34,6 +33,7 @@ REPO_ID = "LucioLuque/lama"
 T = 1000
 STEPS = 10
 SIGMOID_K = 10.0
+MODEL_TITLE_FONTSIZE = 14
 
 #800 esta bien, 790 tambien
 
@@ -56,6 +56,16 @@ MODELS_CFG = {
 }
 
 COL_LABELS = ["SAR", "Nublada", "DBCR-S", "DBCR-SC (sin TL)", "DBCR", "Original"]
+
+TEST_DIR = ROOT / "data" / "test"
+
+def resolve_paths(paths):
+    return {
+        "s1": TEST_DIR / "south_america_s1" / Path(paths["s1"]).name,
+        "s2_cloudy": TEST_DIR / "south_america_s2_cloudy" / Path(paths["s2_cloudy"]).name,
+        "s2": TEST_DIR / "south_america_s2" / Path(paths["s2"]).name,
+        "mask": TEST_DIR / "south_america_s2_masks" / Path(paths["mask"]).name,
+    }
 
 
 def normalize_s2(s2_raw):
@@ -95,7 +105,7 @@ def load_ranking_entry(ranking_path: Path, rank_number: int) -> dict:
 
 
 def load_sample(entry: dict):
-    paths = entry["paths"]
+    paths = resolve_paths(entry["paths"])
 
     with rasterio.open(paths["s1"]) as src:
         s1_raw = src.read().astype(np.float32)
@@ -189,7 +199,7 @@ def run_inference(model, model_type: str, sar_mode: str, cloudy_norm, s1_norm, d
     return pred.squeeze(0).clamp(0, 1).cpu().numpy()
 
 
-def plot_sample(entry: dict, models: dict, show: bool = True):
+def build_panels_for_entry(entry: dict, models: dict):
     s1_raw, s1_norm, cloudy_norm, clean_norm = load_sample(entry)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -198,7 +208,6 @@ def plot_sample(entry: dict, models: dict, show: bool = True):
     stats = get_rgb_stats(cloudy_t, clean_t)
 
     preds = []
-    psnr_values = []
     for name, cfg in MODELS_CFG.items():
         pred = run_inference(
             model=models[name],
@@ -210,30 +219,53 @@ def plot_sample(entry: dict, models: dict, show: bool = True):
         )
         pred_t = torch.from_numpy(pred).float()
         preds.append(pred_t)
-        psnr_values.append(float(psnr(pred_t.unsqueeze(0), clean_t.unsqueeze(0))))
 
     cloudy_rgb = to_rgb(cloudy_t, stats=stats)
     clean_rgb = to_rgb(clean_t, stats=stats)
     sar_img = to_sar_np(s1_raw, band=0)
 
-    fig, axes = plt.subplots(1, len(COL_LABELS), figsize=(4 * len(COL_LABELS), 5))
-    panels = [
+    return [
         (sar_img, "SAR"),
         (cloudy_rgb, "Nublada"),
-        (to_rgb(preds[0], stats=stats), f"DBCR-S\nPSNR={psnr_values[0]:.2f} dB"),
-        (to_rgb(preds[1], stats=stats), f"DBCR-SC (sin TL)\nPSNR={psnr_values[1]:.2f} dB"),
-        (to_rgb(preds[2], stats=stats), f"DBCR\nPSNR={psnr_values[2]:.2f} dB"),
+        # (to_rgb(preds[0], stats=stats), f"DBCR-S\nPSNR={psnr_values[0]:.2f} dB"),
+        # (to_rgb(preds[1], stats=stats), f"DBCR-SC (sin TL)\nPSNR={psnr_values[1]:.2f} dB"),
+        # (to_rgb(preds[2], stats=stats), f"DBCR\nPSNR={psnr_values[2]:.2f} dB"),
+        (to_rgb(preds[0], stats=stats), "DBCR-S"),
+        (to_rgb(preds[1], stats=stats), "DBCR-SC (sin TL)"),
+        (to_rgb(preds[2], stats=stats), "DBCR"),
         (clean_rgb, "Original"),
     ]
 
-    for ax, (img, title) in zip(axes, panels):
-        if img.ndim == 2:
-            ax.imshow(img, cmap="gray")
-        else:
-            ax.imshow(img)
-        ax.set_title(title)
-        ax.axis("off")
-    fig.tight_layout()
+
+def plot_samples(entries: list[dict], models: dict, show: bool = True):
+    n_rows = len(entries)
+    n_cols = len(COL_LABELS)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 5 * n_rows))
+    if n_rows == 1:
+        axes = np.expand_dims(axes, axis=0)
+
+    for row_idx, entry in enumerate(entries):
+        panels = build_panels_for_entry(entry, models)
+        row_axes = axes[row_idx]
+        for ax, (img, title) in zip(row_axes, panels):
+            if img.ndim == 2:
+                ax.imshow(img, cmap="gray", aspect="auto")
+            else:
+                ax.imshow(img, aspect="auto")
+            if row_idx == 0:
+                ax.set_title(title, fontsize=MODEL_TITLE_FONTSIZE)
+            ax.axis("off")
+
+    # fig.tight_layout()
+
+    fig.subplots_adjust(
+    left=0.01,
+    right=0.99,
+    top=0.93,
+    bottom=0.02,
+    wspace=0.02,
+    hspace=0.02,
+    )
 
     if show:
         plt.show()
@@ -241,32 +273,35 @@ def plot_sample(entry: dict, models: dict, show: bool = True):
 
 
 def main():
+    # python visualize/visualize_dbcr_complex_v7.py --ranks 790 800
     parser = argparse.ArgumentParser(description="Visualize one ranked sample from DBCR model comparison using the v7 ranking.")
     parser.add_argument("--ranking-file", default=str(RANKING_DEFAULT))
-    parser.add_argument("--rank", type=int, required=True, help="Rank 1-based to visualize from the JSON ranking file.")
+    parser.add_argument("--ranks", type=int, nargs=2, required=True, help="Exactly two ranks (1-based) to visualize from the JSON ranking file.")
     args = parser.parse_args()
 
-    def resolve_default_save_path(rank_number: int) -> Path:
+    def resolve_default_save_path(rank_a: int, rank_b: int) -> Path:
         default_dir = ROOT / "visualize" / "outputs"
-        return default_dir / f"dbcr_complex_v7_rank{rank_number}.png"
+        return default_dir / f"dbcr_complex_v7_ranks{rank_a}_{rank_b}.png"
 
     ranking_path = Path(args.ranking_file)
-    entry = load_ranking_entry(ranking_path, args.rank)
+    entries = [load_ranking_entry(ranking_path, rank_number) for rank_number in args.ranks]
 
-    print(f"Rank {entry['rank']} | PSNR={entry['psnr']:.4f}")
-    print(f"S1        : {entry['paths']['s1']}")
-    print(f"S2_CLOUDY : {entry['paths']['s2_cloudy']}")
-    print(f"S2_CLEAN  : {entry['paths']['s2']}")
-    print(f"MASK      : {entry['paths']['mask']}")
+    for entry in entries:
+        print(f"Rank {entry['rank']} | PSNR={entry['psnr']:.4f}")
+        print(f"S1        : {entry['paths']['s1']}")
+        print(f"S2_CLOUDY : {entry['paths']['s2_cloudy']}")
+        print(f"S2_CLEAN  : {entry['paths']['s2']}")
+        print(f"MASK      : {entry['paths']['mask']}")
+        print("-" * 80)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     models = load_models(device)
 
-    fig = plot_sample(entry, models=models, show=True)
+    fig = plot_samples(entries, models=models, show=True)
 
     save_answer = input("Guardar figura? [s/n]: ").strip().lower()
     if save_answer in {"s", "si", "sí", "y", "yes"}:
-        output_path = resolve_default_save_path(args.rank)
+        output_path = resolve_default_save_path(args.ranks[0], args.ranks[1])
         output_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(output_path, bbox_inches="tight", dpi=150)
         print(f"Figura guardada en {output_path}")

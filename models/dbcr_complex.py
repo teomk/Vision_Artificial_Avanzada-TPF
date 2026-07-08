@@ -4,10 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
-# -------------------------
-# Time Embedding
-# -------------------------
-
 class SinusoidalTimeEmbedding(nn.Module):
     def __init__(self, dim):
         super().__init__()
@@ -35,10 +31,6 @@ class TimeMLP(nn.Module):
     def forward(self, t):
         return self.net(t)
 
-# -------------------------
-# NAFNet primitives
-# -------------------------
-
 class LayerNorm2d(nn.Module):
     def __init__(self, channels, eps=1e-6):
         super().__init__()
@@ -52,16 +44,10 @@ class LayerNorm2d(nn.Module):
         x = (x - mean) / torch.sqrt(var + self.eps)
         return x * self.weight + self.bias
 
-
 class SimpleGate(nn.Module):
     def forward(self, x):
         x1, x2 = x.chunk(2, dim=1)
         return x1 * x2
-
-
-# -------------------------
-# Time-Embedded NAFBlock
-# -------------------------
 
 class TimeNAFBlock(nn.Module):
     def __init__(self, channels, time_dim, dw_expand=2, ffn_expand=2):
@@ -109,17 +95,6 @@ class TimeNAFBlock(nn.Module):
         return x
 
 class SARFBlock(nn.Module):
-    """
-    SAR Fusion Block con window attention.
-
-    Parámetros:
-    channels:    canales de entrada (igual en optical y SAR)
-    num_heads:   cabezas de atención
-    window_size: tamaño de ventana para window attention (default 8).
-                Si None, usa global attention (solo viable en resoluciones
-                pequeñas como el bottleneck).
-    """
-
     def __init__(self, channels, num_heads=1, window_size=8, mlp_ratio=4):
         super().__init__()
 
@@ -130,7 +105,7 @@ class SARFBlock(nn.Module):
         self.to_q = nn.Conv2d(channels, channels, kernel_size=1)
         self.to_k = nn.Conv2d(channels, channels, kernel_size=1)
         self.to_v = nn.Conv2d(channels, channels, kernel_size=1)
-        self.out_proj = nn.Conv2d(channels, channels, kernel_size=1)  # proyección post-attention
+        self.out_proj = nn.Conv2d(channels, channels, kernel_size=1)
 
         self.norm_opt = LayerNorm2d(channels)
         self.norm_sar = LayerNorm2d(channels)
@@ -148,10 +123,6 @@ class SARFBlock(nn.Module):
         return K, V
 
     def _global_attention(self, Q, K, V, B, C, H, W):
-        """
-        Attention global — O((H*W)²). Solo viable en resoluciones
-        pequeñas (bottleneck ~32×32). No usar en sf0/sf1.
-        """
         hd = C // self.num_heads
         Q = Q.reshape(B, self.num_heads, hd, H * W).permute(0, 1, 3, 2)
         K = K.reshape(B, self.num_heads, hd, H * W).permute(0, 1, 3, 2)
@@ -160,10 +131,6 @@ class SARFBlock(nn.Module):
         return out.permute(0, 1, 3, 2).reshape(B, C, H, W)
 
     def _window_attention(self, Q, K, V, B, C, H, W):
-        """
-        Window attention — O(ws⁴) por ventana, independiente de H×W.
-        Cada píxel atiende solo a los ws² píxeles de su ventana local.
-        """
         ws     = self.window_size
         hd     = C // self.num_heads
         nH, nW = H // ws, W // ws
@@ -195,10 +162,8 @@ class SARFBlock(nn.Module):
         K = self.to_k(sar_n)
         V = self.to_v(sar_n)
 
-        # Fix resolución: alinear SAR a resolución del optical
         K, V = self._align_sar(K, V, H, W)
 
-        # Usar window attention si la resolución lo requiere
         use_window = (self.window_size is not None and H > self.window_size and H % self.window_size == 0)
         if use_window:
             out = self._window_attention(Q, K, V, B, C, H, W)
@@ -224,16 +189,12 @@ class UpBlockNAF(nn.Module):
     def forward(self, x, skip, t_emb):
         x = self.up(x)
         if x.shape[-2:] != skip.shape[-2:]:
-            print(f"Alerta: resolución del upsample {x.shape[-2:]} no coincide con skip {skip.shape[-2:]}. Ajustando con interpolate.")
+            print(f"resolución del upsample {x.shape[-2:]} no coincide con skip {skip.shape[-2:]}. Ajustando con interpolate.")
             x = F.interpolate(x, size=skip.shape[-2:], mode="bilinear", align_corners=False)
         x = torch.cat([x, skip], dim=1)
         x = self.proj(x)
         x = self.naf(x, t_emb)
         return x
-
-# -------------------------
-# SAR Encoder Branch
-# -------------------------
 
 class SAREncoderBranch(nn.Module):
     def __init__(self, sar_channels=2, base_channels=64, time_dim=128, include_encoder_4=False):
@@ -285,11 +246,6 @@ class SAREncoderBranch(nn.Module):
             "mid":    mid,
         }
 
-
-# -------------------------
-# DBCR
-# -------------------------
-
 class DownNAFSARF(nn.Module):
     def __init__(self, in_channels, down_channels, time_dim, num_heads=1, window_size=None):
         super().__init__()
@@ -305,34 +261,6 @@ class DownNAFSARF(nn.Module):
         return x, skip
 
 class DBCR(nn.Module):
-    """
-    DB-CR con tres cambios respecto al modelo original:
-
-    CAMBIO 1 — Window attention en SFBlock (window_size=8):
-        La attention global genera una matriz (H*W)×(H*W) que para
-        256×256 requiere ~16 GB. Window attention limita cada ventana
-        a ws×ws tokens (64 con ws=8), reduciendo la VRAM en órdenes
-        de magnitud. Los SFBlocks en el bottleneck (32×32) siguen
-        usando global attention automáticamente porque H <= window_size
-        no se cumple y la resolución pequeña lo permite.
-
-    CAMBIO 2 — Fix de resolución SAR/optical en SFBlock:
-        Los skips del SAR encoder (scale0..scale3) se guardan ANTES
-        del downsampling, por lo que tienen el doble de resolución
-        que el feature map óptico correspondiente. El SFBlock ahora
-        alinea K y V con interpolate bilineal antes de la attention.
-
-    CAMBIO 3 — Gradient checkpointing en bloques pesados:
-        En vez de guardar todas las activaciones del forward para el
-        backward, las recomputa on-the-fly. Cuesta ~25% más de tiempo
-        pero reduce la VRAM del backward a la mitad aproximadamente.
-        Se aplica en SFBlocks y NAFBlocks del bottleneck, que son los
-        más costosos en memoria.
-
-    El resultado es un pico de ~19 GB con batch=12 en una L4 de 24 GB,
-    vs OOM con el modelo original.
-    """
-
     def __init__(
         self,
         image_channels=6,
@@ -343,8 +271,8 @@ class DBCR(nn.Module):
         num_heads=1,
         window_size_not_sf0=None,        # sf1/sf2/sf3/sf_mid global
         window_size_sf0=8,       # solo sf0 con window
-        use_checkpoint=True, # CAMBIO 3: gradient checkpointing
-        include_encoder_4=False, # Si True, agrega un bloque extra sf4 con resolución 16x16 (y un up4 correspondiente)
+        use_checkpoint=True,
+        include_encoder_4=False,
     ):
         super().__init__()
 
@@ -382,26 +310,11 @@ class DBCR(nn.Module):
         self.out   = nn.Conv2d(C, image_channels, kernel_size=3, padding=1)
 
     def _ckpt(self, fn, *args):
-        """
-        Gradient checkpointing (CAMBIO 3).
-        Recomputa las activaciones en el backward en vez de guardarlas.
-        use_reentrant=False es el modo moderno y más estable.
-        """
         if self.use_checkpoint and self.training:
             return checkpoint(fn, *args, use_reentrant=False)
         return fn(*args)
 
     def forward(self, x_t, t, s2_cloudy, sar):
-        """
-        x_t:       estado intermedio del bridge   [B, 6, H, W]
-        t:         timestep                        [B]
-        s2_cloudy: Sentinel-2 nublado              [B, 6, H, W]
-        sar:       Sentinel-1 SAR                  [B, 2, H, W]
-
-        Retorna:
-        pred_clean: predicción S2 limpio           [B, 6, H, W]
-        """
-
         t_emb = self.time_mlp(t)
 
         sar_feats = self.sar_branch(sar, t_emb)
@@ -431,63 +344,3 @@ class DBCR(nn.Module):
         x = self.up1(x, skip1, t_emb)
 
         return self.out(x)
-
-# -------------------------
-# Training loop mínimo
-# -------------------------
-# Para usar bf16 en el training loop (CAMBIO 4 — va en tu trainer, no acá):
-#
-#   scaler = torch.cuda.amp.GradScaler()
-#
-#   for batch in dataloader:
-#       optimizer.zero_grad()
-#       with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-#           pred = model(x_t, t, s2_cloudy, sar)
-#           loss = F.l1_loss(pred, s2_clean)   # MAE, como el paper
-#       scaler.scale(loss).backward()
-#       scaler.step(optimizer)
-#       scaler.update()
-
-
-# -------------------------
-# Sanity check
-# -------------------------
-
-if __name__ == "__main__":
-    B, H, W = 4, 256, 256
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model = DBCR(
-        image_channels=6,
-        condition_channels=6,
-        sar_channels=2,
-        base_channels=64,
-        time_dim=128,
-        num_heads=1,
-        window_size_not_sf0=None,
-        window_size_sf0=8,
-        use_checkpoint=True,
-        include_encoder_4=False,
-    ).to(device)
-
-    x_t       = torch.randn(B, 6, H, W).to(device)
-    t         = torch.randint(0, 1000, (B,)).to(device)
-    s2_cloudy = torch.randn(B, 6, H, W).to(device)
-    sar       = torch.randn(B, 2, H, W).to(device)
-
-    model.train()
-
-    if device.type == "cuda":
-        with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-            out  = model(x_t, t, s2_cloudy, sar)
-            loss = out.mean()
-    else:
-        out  = model(x_t, t, s2_cloudy, sar)
-        loss = out.mean()
-    loss.backward()
-
-    n_params = sum(p.numel() for p in model.parameters()) / 1e6
-    print(f"Output shape : {out.shape}")
-    print(f"Parámetros   : {n_params:.2f}M")
-    print(f"VRAM pico    : {torch.cuda.max_memory_allocated() / 1e9:.2f} GB")

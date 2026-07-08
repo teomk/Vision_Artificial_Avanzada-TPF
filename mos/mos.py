@@ -8,7 +8,6 @@ import torch
 import sys
 from pathlib import Path
 from PIL import Image, ImageTk
-import noise
 
 ROOT       = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT / "models"
@@ -32,7 +31,6 @@ RESULTS_PATH      = ROOT / "visualize" / "mos_results.json"
 CACHE_DIR         = ROOT / "visualize" / "inference_cache"
 CLOUDY_IMAGES_DIR = ROOT / "visualize"
 
-# Crear directorio de caché si no existe
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 CLOUDY_IMAGES = {
@@ -50,8 +48,6 @@ S1_MEAN = np.array([-8.999908447265625, -14.78221321105957], dtype=np.float32)
 S1_STD  = np.array([2.413282871246338,  2.3029115200042725], dtype=np.float32)
 
 IMG_SIZE = 256
-
-# ── Normalización ─────────────────────────────────────────────────────
 
 def normalize_s2(s2_raw):
     return np.clip(s2_raw / 10000.0, 0, 1).astype(np.float32)
@@ -76,7 +72,6 @@ def to_sar_np(s1_raw, band=0):
     img = np.clip((img - p2) / (p98 - p2 + 1e-8), 0, 1)
     return (img * 255).astype(np.uint8)
 
-
 def format_seconds(seconds):
     seconds = max(0, int(round(seconds)))
     minutes, secs = divmod(seconds, 60)
@@ -84,53 +79,6 @@ def format_seconds(seconds):
     if hours:
         return f"{hours:d}:{minutes:02d}:{secs:02d}"
     return f"{minutes:d}:{secs:02d}"
-
-# ── Generación de nube sintética ──────────────────────────────────────
-
-def generate_cloud_mask(size=256, scale=80.0, octaves=6, threshold=0.1, seed=None):
-    """
-    Genera una máscara de nube con forma orgánica usando Perlin noise.
-    Devuelve alpha [H, W] float [0, 1] donde 1 = nube opaca.
-    """
-    if seed is None:
-        seed = random.randint(0, 10000)
-
-    offset_x = random.randint(0, 10000)
-    offset_y = random.randint(0, 10000)
-
-    noise_map = np.zeros((size, size), dtype=np.float32)
-    for y in range(size):
-        for x in range(size):
-            nx = (x + offset_x) / scale
-            ny = (y + offset_y) / scale
-            noise_map[y, x] = noise.pnoise2(nx, ny, octaves=octaves, persistence=0.5, lacunarity=2.0)
-
-    # Normalizar a [0, 1]
-    noise_map = (noise_map - noise_map.min()) / (noise_map.max() - noise_map.min() + 1e-8)
-
-    # Máscara suave: donde noise > threshold → nube, con bordes difusos
-    alpha = np.clip((noise_map - threshold) / (1.0 - threshold + 1e-8), 0, 1)
-
-    # Suavizar bordes
-    from scipy.ndimage import gaussian_filter
-    alpha = gaussian_filter(alpha, sigma=3)
-    alpha = np.clip(alpha / (alpha.max() + 1e-8), 0, 1)
-
-    return alpha.astype(np.float32)
-
-
-def apply_cloud(s2_norm, alpha):
-    """
-    Aplica nube sobre imagen S2 normalizada [6, H, W].
-    alpha [H, W] float [0,1]: opacidad de la nube.
-    Nube = valor 1.0 en todas las bandas (blanco brillante).
-    """
-    cloudy = s2_norm.copy()
-    cloudy = cloudy * (1 - alpha[None]) + 1.0 * alpha[None]
-    return cloudy.astype(np.float32)
-
-
-# ── Carga de modelos ──────────────────────────────────────────────────
 
 def load_models(device):
     print("Cargando modelos...")
@@ -159,16 +107,12 @@ def load_models(device):
         "DBCR":             (load_complex("dbcr_complex_v7.pth"),                 "ControlNet", "complex"),
     }
 
-# ── Caché de inferencias ──────────────────────────────────────────
-
 def get_cache_path(image_name):
-    """Retorna el directorio de caché para una imagen específica."""
     cache_subdir = CACHE_DIR / image_name.replace(" ", "_")
     cache_subdir.mkdir(parents=True, exist_ok=True)
     return cache_subdir
 
 def save_predictions_cache(image_name, preds, psnr_values):
-    """Guarda las predicciones en caché."""
     cache_path = get_cache_path(image_name)
     
     for model_name, pred_tensor in preds.items():
@@ -178,10 +122,7 @@ def save_predictions_cache(image_name, preds, psnr_values):
     psnr_file = cache_path / "psnr_values.pt"
     torch.save(psnr_values, psnr_file)
     
-    print(f"✓ Predicciones guardadas en caché: {cache_path}")
-
 def load_predictions_cache(image_name):
-    """Carga las predicciones desde caché si existen."""
     cache_path = get_cache_path(image_name)
     
     psnr_file = cache_path / "psnr_values.pt"
@@ -197,7 +138,6 @@ def load_predictions_cache(image_name):
     
     psnr_values = torch.load(psnr_file, map_location="cpu")
     
-    print(f"✓ Predicciones cargadas desde caché: {cache_path}")
     return preds, psnr_values
 
 def run_inference(model, model_type, sar_mode, cloudy_t, s1_t, device):
@@ -213,16 +153,12 @@ def run_inference(model, model_type, sar_mode, cloudy_t, s1_t, device):
             s1_b      = s1_t.unsqueeze(0).float().to(device)
             condition = cloudy_b
             sar       = s1_b
-        pred = inference(model, cloudy_b, condition, device,
-                         T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K, show_progress=False)
+        pred = inference(model, cloudy_b, condition, device, T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K, show_progress=False)
     else:
         fake_batch              = (s1_t.unsqueeze(0).float(), cloudy_b, cloudy_b)
         s2_cloudy, _, cond, sar = unpack_batch(fake_batch, sar_mode, device)
-        pred = inference(model, s2_cloudy, cond, device,
-                         T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K)
+        pred = inference(model, s2_cloudy, cond, device, T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K)
     return pred.squeeze(0).clamp(0, 1).cpu()
-
-# ── Resultados ────────────────────────────────────────────────────────
 
 def load_results():
     if RESULTS_PATH.exists():
@@ -238,10 +174,9 @@ def load_results():
     else:
         results = {}
 
-    # Compatibilidad con resultados viejos
-    results.setdefault("votes", {})       # votos al primer puesto
-    results.setdefault("rankings", {})    # acumulado por puestos
-    results.setdefault("points", {})      # puntaje tipo Borda: 1°=3, 2°=2, 3°=1
+    results.setdefault("votes", {})
+    results.setdefault("rankings", {})
+    results.setdefault("points", {})
     results.setdefault("sessions", [])
 
     return results
@@ -249,8 +184,6 @@ def load_results():
 def save_results(results):
     with open(RESULTS_PATH, "w") as f:
         json.dump(results, f, indent=2)
-
-# ── App ───────────────────────────────────────────────────────────────
 
 class MOSApp:
     def __init__(self, root, models, device):
@@ -272,17 +205,13 @@ class MOSApp:
         self.order         = None
         self.psnr_values   = None
 
-        # Ranking manual: clic 1 = puesto 1, clic 2 = puesto 2, clic 3 = puesto 3
         self.current_ranking = []
         self.pred_frames     = {}
         self.pred_labels     = {}
                 
-
         root.title("MOS — Evaluación de modelos")
         self._build_ui()
         self._show_phase1()
-
-    # ── UI base ───────────────────────────────────────────────────────
 
     def _build_ui(self):
         self.frame_top = tk.Frame(self.root)
@@ -290,17 +219,13 @@ class MOSApp:
         self.label_info = tk.Label(self.frame_top, text="", font=("Arial", 12))
         self.label_info.pack()
 
-        # Frame con scroll
         self.scroll_container = tk.Frame(self.root)
         self.scroll_container.pack(fill="both", expand=True)
 
         self.canvas_scroll = tk.Canvas(self.scroll_container)
-        self.scrollbar_x   = tk.Scrollbar(self.scroll_container, orient="horizontal",
-                                           command=self.canvas_scroll.xview)
-        self.scrollbar_y   = tk.Scrollbar(self.scroll_container, orient="vertical",
-                                           command=self.canvas_scroll.yview)
-        self.canvas_scroll.configure(xscrollcommand=self.scrollbar_x.set,
-                                     yscrollcommand=self.scrollbar_y.set)
+        self.scrollbar_x   = tk.Scrollbar(self.scroll_container, orient="horizontal", command=self.canvas_scroll.xview)
+        self.scrollbar_y   = tk.Scrollbar(self.scroll_container, orient="vertical", command=self.canvas_scroll.yview)
+        self.canvas_scroll.configure(xscrollcommand=self.scrollbar_x.set, yscrollcommand=self.scrollbar_y.set)
 
         self.scrollbar_x.pack(side="bottom", fill="x")
         self.scrollbar_y.pack(side="right",  fill="y")
@@ -308,9 +233,7 @@ class MOSApp:
 
         self.frame_canvas = tk.Frame(self.canvas_scroll)
         self.canvas_scroll.create_window((0, 0), window=self.frame_canvas, anchor="nw")
-        self.frame_canvas.bind("<Configure>",
-            lambda e: self.canvas_scroll.configure(
-                scrollregion=self.canvas_scroll.bbox("all")))
+        self.frame_canvas.bind("<Configure>", lambda e: self.canvas_scroll.configure(scrollregion=self.canvas_scroll.bbox("all")))
 
         self.frame_bottom = tk.Frame(self.root)
         self.frame_bottom.pack(pady=8)
@@ -319,13 +242,10 @@ class MOSApp:
         for w in self.frame_canvas.winfo_children(): w.destroy()
         for w in self.frame_bottom.winfo_children(): w.destroy()
 
-    # ── FASE 1: seleccionar imagen ────────────────────────────────────
-
     def _show_phase1(self):
         self._clear_canvas()
         self.label_info.config(text="Selecciona una imagen nublada. Luego presioná 'Generar/Cargar predicciones'.")
 
-        # Panel izquierdo: selección de imagen
         left = tk.Frame(self.frame_canvas)
         left.grid(row=0, column=0, padx=10, pady=10, sticky="n")
 
@@ -358,7 +278,6 @@ class MOSApp:
             height=2
         ).pack(pady=16)
 
-        # Panel derecho: preview
         right = tk.Frame(self.frame_canvas)
         right.grid(row=0, column=1, padx=10, pady=10)
 
@@ -367,10 +286,7 @@ class MOSApp:
         self.preview_label.pack(pady=4)
 
     def _select_image(self, image_name):
-        """Selecciona una imagen nublada y muestra su preview."""
-        self.selected_image_name = image_name
-        
-        # Actualizar UI: resaltar botón seleccionado
+        self.selected_image_name = image_name        
         for widget in self.frame_canvas.winfo_children():
             if isinstance(widget, tk.Frame):
                 for btn in widget.winfo_children():
@@ -380,7 +296,6 @@ class MOSApp:
                         else:
                             btn.config(bg="#95a5a6")
         
-        # Cargar y mostrar preview
         image_path = CLOUDY_IMAGES[image_name]
         cloudy_raw = np.load(image_path)
         cloudy_norm = normalize_s2(cloudy_raw)
@@ -392,8 +307,6 @@ class MOSApp:
         self.preview_label.config(image=tk_img)
         self.preview_label.image = tk_img
 
-    # ── FASE 2: inferencia (con caché) ────────────────────────────────
-
     def _run_predictions(self):
         if self.selected_image_name is None:
             messagebox.showwarning("Sin imagen", "Selecciona una imagen primero.")
@@ -402,22 +315,18 @@ class MOSApp:
         self.label_info.config(text="Verificando caché e iniciando predicciones...")
         self.root.update()
 
-        # Cargar imagen seleccionada
         image_path = CLOUDY_IMAGES[self.selected_image_name]
         cloudy_raw = np.load(image_path)
         self.cloudy_norm = normalize_s2(cloudy_raw)
         
-        # Intentar cargar desde caché
         cached_preds, cached_psnr = load_predictions_cache(self.selected_image_name)
         
         if cached_preds is not None and cached_psnr is not None:
-            # Usar caché
             self.preds = cached_preds
             self.psnr_values = cached_psnr
             self.label_info.config(text="✓ Predicciones cargadas desde caché")
             self.root.update_idletasks()
         else:
-            # Generar predicciones
             cloudy_t = torch.from_numpy(self.cloudy_norm)
             s1_t = torch.from_numpy(self.s1_norm)
             clear_t = torch.from_numpy(self.s2_clean_norm)
@@ -429,9 +338,7 @@ class MOSApp:
 
             with torch.no_grad():
                 for index, (name, (model, sar_mode, mtype)) in enumerate(model_items, start=1):
-                    self.label_info.config(
-                        text=f"Generando predicciones... {index}/{total_models}"
-                    )
+                    self.label_info.config(text=f"Generando predicciones... {index}/{total_models}")
                     self.root.update_idletasks()
 
                     self.preds[name] = run_inference(model, mtype, sar_mode, cloudy_t, s1_t, self.device)
@@ -452,14 +359,11 @@ class MOSApp:
                 for name, pred in self.preds.items()
             }
             
-            # Guardar en caché
             save_predictions_cache(self.selected_image_name, self.preds, self.psnr_values)
 
         self.order = list(self.preds.keys())
         random.shuffle(self.order)
         self._show_phase2()
-
-    # ── FASE 3: votar ─────────────────────────────────────────────────
 
     def _show_phase2(self):
         self._clear_canvas()
@@ -467,9 +371,7 @@ class MOSApp:
         self.pred_frames = {}
         self.pred_labels = {}
 
-        self.label_info.config(
-            text="Rankeá las predicciones: clic 1 = mejor, clic 2 = segunda, clic 3 = tercera."
-        )
+        self.label_info.config(text="Rankeá las predicciones: clic 1 = mejor, clic 2 = segunda, clic 3 = tercera.")
 
         col_labels = ["SAR", "Nublada"] + [f"Pred {i+1}" for i in range(len(self.order))] + ["Original"]
         cols_data = (
@@ -503,15 +405,9 @@ class MOSApp:
                 pred_name = self.order[col_idx - 2]
 
                 lbl.config(cursor="hand2", bd=3, relief="flat")
-                lbl.bind(
-                    "<Button-1>",
-                    lambda e, n=pred_name: self._select_rank(n)
-                )
+                lbl.bind("<Button-1>", lambda e, n=pred_name: self._select_rank(n))
 
-                frame.bind(
-                    "<Button-1>",
-                    lambda e, n=pred_name: self._select_rank(n)
-                )
+                frame.bind("<Button-1>", lambda e, n=pred_name: self._select_rank(n))
 
                 self.pred_buttons.append((pred_name, frame))
                 self.pred_frames[pred_name] = frame
@@ -532,12 +428,6 @@ class MOSApp:
         ).pack(side="left", padx=6)
 
     def _select_rank(self, pred_name):
-        """
-        Registra ranking por orden de clic:
-            primer clic  -> puesto 1
-            segundo clic -> puesto 2
-            tercer clic  -> puesto 3
-        """
         if pred_name in self.current_ranking:
             messagebox.showinfo(
                 "Ya seleccionada",
@@ -580,15 +470,7 @@ class MOSApp:
         else:
             self._confirm_ranking()
 
-
     def _confirm_ranking(self):
-        """
-        Guarda una sesión completa con ranking 1, 2, 3.
-        También acumula:
-            - votes: votos al primer puesto
-            - rankings: cuántas veces cada modelo quedó 1°, 2° o 3°
-            - points: puntaje agregado tipo Borda
-        """
         ranking = list(self.current_ranking)
 
         if len(ranking) != len(self.order):
@@ -600,10 +482,8 @@ class MOSApp:
 
         best_name = ranking[0]
 
-        # Voto al primer puesto
         self.results["votes"][best_name] = self.results["votes"].get(best_name, 0) + 1
 
-        # Inicializar acumuladores
         for name in ranking:
             self.results["rankings"].setdefault(
                 name,
@@ -611,7 +491,6 @@ class MOSApp:
             )
             self.results["points"].setdefault(name, 0)
 
-        # Borda: 1°=3 pts, 2°=2 pts, 3°=1 pt
         total_preds = len(ranking)
 
         for pos, name in enumerate(ranking, start=1):
@@ -630,7 +509,6 @@ class MOSApp:
         save_results(self.results)
         self._show_phase3(ranking)
 
-
     def _reset_ranking(self):
         self.current_ranking = []
 
@@ -647,8 +525,6 @@ class MOSApp:
         self.label_info.config(
             text="Ranking reiniciado. Clic 1 = mejor, clic 2 = segunda, clic 3 = tercera."
         )
-
-    # ── FASE 4: revelar ───────────────────────────────────────────────
 
     def _show_phase3(self, ranking):
         self._clear_canvas()
@@ -699,7 +575,6 @@ class MOSApp:
                 font=("Arial", 11)
             ).pack(anchor="w")
 
-        # Tabla acumulada
         table_frame = tk.Frame(self.frame_canvas)
         table_frame.pack(pady=12)
 
@@ -723,7 +598,6 @@ class MOSApp:
 
         all_names = list(self.models.keys())
 
-        # Ordenar por puntos acumulados descendentes
         all_names = sorted(
             all_names,
             key=lambda n: self.results["points"].get(n, 0),
@@ -765,9 +639,6 @@ class MOSApp:
             bg="#4a90d9",
             fg="white"
         ).pack(pady=6)
-
-
-# ── Main ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

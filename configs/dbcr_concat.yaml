@@ -1,3 +1,4 @@
+#Config de un experimento, para cada uno de este modelo fuimos variando este archivo.
 sar_mode: "Concat"
 
 model: "dbcr"

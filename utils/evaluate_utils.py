@@ -14,7 +14,6 @@ def psnr(pred, target, max_val=1.0):
     return (10 * torch.log10(max_val ** 2 / mse)).item()
 
 def ssim(pred, target, window_size=11, C1=0.01**2, C2=0.03**2):
-    """SSIM por banda, promediado."""
     scores = []
     for b in range(pred.shape[1]):
         p = pred[:, b:b+1]
@@ -46,12 +45,10 @@ def sam(pred, target, eps=1e-8):
     angle  = torch.acos(cos)
     return torch.rad2deg(angle).mean().item()
 
-
 def _count_nonfinite(x):
     if x is None:
         return 0
     return int((~torch.isfinite(x)).sum().item())
-
 
 def evaluate(inference, model, loader, sar_mode, device, T=1000, steps=10, sigmoid_k=10.0):
     model.eval()
@@ -70,7 +67,7 @@ def evaluate(inference, model, loader, sar_mode, device, T=1000, steps=10, sigmo
             bad_inputs = {name: _count_nonfinite(t) for name, t in tensors_to_check.items() if _count_nonfinite(t) > 0}
             if bad_inputs:
                 skipped += 1
-                print(f"[WARN] Batch {batch_idx}: valores no finitos en inputs -> {bad_inputs}. Se omite.")
+                print(f"Batch {batch_idx}: valores no finitos en inputs -> {bad_inputs}. Se omite.") #habia muestras corruptas
                 continue
 
             pred = inference(model, s2_cloudy, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k).clamp(0, 1)
@@ -78,7 +75,7 @@ def evaluate(inference, model, loader, sar_mode, device, T=1000, steps=10, sigmo
             bad_pred = _count_nonfinite(pred)
             if bad_pred > 0:
                 skipped += 1
-                print(f"[WARN] Batch {batch_idx}: predicción con {bad_pred} valores no finitos. Se omite.")
+                print(f"Batch {batch_idx}: predicción con {bad_pred} valores no finitos. Se omite.")
                 continue
 
             total_mae  += mae(pred, s2_clean)
@@ -86,9 +83,6 @@ def evaluate(inference, model, loader, sar_mode, device, T=1000, steps=10, sigmo
             total_ssim += ssim(pred, s2_clean)
             total_sam  += sam(pred, s2_clean)
             n_batches  += 1
-
-    if n_batches == 0:
-        raise RuntimeError("No hubo batches válidos para calcular métricas.")
 
     metrics = {
         "mae":  float(total_mae  / n_batches),

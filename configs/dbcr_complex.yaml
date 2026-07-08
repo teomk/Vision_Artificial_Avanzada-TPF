@@ -1,3 +1,4 @@
+#Config de un experimento, para cada uno de este modelo fuimos variando este archivo.
 sar_mode: "ControlNet"   
 
 model: "dbcr_complex"
@@ -20,11 +21,10 @@ model_args:
   base_channels: 64
   time_dim: 128
   num_heads: 1
-  window_size_sf0: 8        # window attention en sf0 (necesario en 256x256)
+  window_size_sf0: 8        # window attention en sf0
   window_size_not_sf0: None  # global attention en sf1/sf2/sf3/sf_mid
-  use_checkpoint: true       # gradient checkpointing para ahorrar VRAM
-  include_encoder_4: false     # incluir encoder_4 (con 512 canales) para mejorar resultados a costa de más VRAM
-
+  use_checkpoint: true       # gradient checkpointing
+  include_encoder_4: false    
 
 huggingface:
   repo_id: "LucioLuque/lama"

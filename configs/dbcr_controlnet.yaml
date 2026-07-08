@@ -1,3 +1,4 @@
+#Config de un experimento, para cada uno de este modelo fuimos variando este archivo.
 sar_mode: "ControlNet"
 
 model: "dbcr"
@@ -16,4 +17,4 @@ huggingface:
   repo_id: "LucioLuque/lama"
   save_filename: "dbcr_controlnet_v3.pth"
   version: 3
-  notes: "Con ControlNet, lr=1e-4, grad clip, scheduler, controlnet 30 epocas!"
+  notes: "Con ControlNet, lr=1e-4, grad clip, scheduler, controlnet 30 epocas"

@@ -27,7 +27,6 @@ from dataset_utils import unpack_batch
 from dataset import SEN12MSCRDataset
 
 def parse_window(value):
-    """'8' -> 8, 'None'/'none'/'null'/'-1' -> None"""
     if value is None:
         return None
     value = str(value).lower()
@@ -62,21 +61,12 @@ def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
     return loss.item()
 
 
-def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
-        start_epoch=0, num_epochs=50, T=1000, sigmoid_k=10.0, history=None,
-        repo_id=None, save_filename=None, checkpoint_every=None):
-    """
-    start_epoch: índice (0-based) de la primera época a correr en esta llamada.
-    num_epochs:  cuántas épocas correr en esta llamada (no el total acumulado).
-    history:     dict previo a continuar, o None para arrancar de cero.
-    checkpoint_every: si se especifica (y hay repo_id/save_filename), sube a HF
-                       un checkpoint intermedio cada N épocas (resiliencia ante
-                       cortes, ya que no se guarda nada en disco local).
-    """
+def fit(model, train_loader, device, sar_mode, optimizer, scheduler, start_epoch=0, num_epochs=50, T=1000, sigmoid_k=10.0, history=None, repo_id=None, save_filename=None, checkpoint_every=None):
+
     if history is None:
         history = {"train_loss": []}
 
-    last_epoch = start_epoch - 1  # por si num_epochs == 0
+    last_epoch = start_epoch - 1
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
 
@@ -105,24 +95,23 @@ def fit(model, train_loader, device, sar_mode, optimizer, scheduler,
 
         if device.type == "cuda":
             print(f"  Época {epoch+1}: avg_loss={avg_loss:.6f} | "
-                  f"VRAM pico={torch.cuda.max_memory_allocated()/1e9:.2f}GB | "
+                  f"VRAM={torch.cuda.max_memory_allocated()/1e9:.2f}GB | "
                   f"lr={optimizer.param_groups[0]['lr']:.2e}")
 
-        # checkpoint intermedio a HF (sin nada en disco local persistente)
+        # checkpoint intermedio a HF
         if checkpoint_every and repo_id and save_filename and (epoch + 1) % checkpoint_every == 0:
             ckpt = build_checkpoint(model, optimizer, scheduler, last_epoch, history)
             upload_checkpoint_to_hf(ckpt, repo_id=repo_id, filename=save_filename)
-            print(f"  Checkpoint intermedio subido a HF (época {epoch+1})")
+            print(f"Checkpoint intermedio subido a HF, epoca {epoch+1})")
 
     return history, last_epoch
-
 
 def build_checkpoint(model, optimizer, scheduler, epoch, history):
     return {
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "scheduler_state_dict": scheduler.state_dict(),
-        "epoch": epoch,          # última época completada (0-based)
+        "epoch": epoch,          # última época completada
         "history": history,
     }
 
@@ -135,17 +124,17 @@ def upload_checkpoint_to_hf(checkpoint, repo_id, filename):
 if __name__ == "__main__":
     # python train/train_dbcr_complex.py --config configs/dbcr_complex.yaml
 
-    parser = argparse.ArgumentParser(description="Entrenar DBCR con SFBlocks (cross-attention SAR)")
+    parser = argparse.ArgumentParser(description="Entrenar DBCR")
     parser.add_argument(
         "--config", type=str, required=True,
-        help="Ruta al config YAML (e.g. configs/dbcr_complex.yaml)"
+        help="Ruta al config YAML"
     )
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode    = cfg["sar_mode"]            # debe ser "ControlNet" (o el modo que entregue s1 separado)
+    sar_mode    = cfg["sar_mode"]
     cfg_train   = cfg["train"]
     cfg_model   = cfg.get("model_args", {})
     cfg_hf      = cfg["huggingface"]
@@ -157,15 +146,15 @@ if __name__ == "__main__":
     T           = cfg_train["T"]
     sigmoid_k   = cfg_train["sigmoid_k"]
 
-    # load_filename: carga SOLO pesos (transfer/finetune, arranca optimizer/epoch de cero)
+    # load_filename: carga solo pesos es para transfer/finetune
     load_filename = cfg_train.get("load_filename")
     load_filename = None if load_filename in (None, "None") else load_filename
 
-    # resume_filename: carga checkpoint COMPLETO (model+optimizer+scheduler+epoch+history)
+    # resume_filename: carga checkpoint completo model, optimizer, scheduler, epoch y  history
     resume_filename = cfg_train.get("resume_filename")
     resume_filename = None if resume_filename in (None, "None") else resume_filename
 
-    checkpoint_every = cfg_train.get("checkpoint_every")  # opcional, ej: 5
+    checkpoint_every = cfg_train.get("checkpoint_every")  # opcional
 
     repo_id       = cfg_hf["repo_id"]
     save_filename = cfg_hf["save_filename"]
@@ -206,7 +195,6 @@ if __name__ == "__main__":
 
     # Dataset
     ds_train = SEN12MSCRDataset(split="train", include_s1=(sar_mode != "None"), include_mask=False, total_bands=(image_channels == 13))
-
     loader_train = DataLoader(ds_train, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=(device.type == "cuda"), persistent_workers=(num_workers > 0))
 
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -231,7 +219,7 @@ if __name__ == "__main__":
     history = {"train_loss": []}
     start_epoch = 0
 
-    if resume_filename is not None: # Continuar un entrenamiento anterior: model + optimizer + scheduler + epoch + history
+    if resume_filename is not None: # Continuar un entrenamiento anterior
         ckpt = download_model(repo_id=repo_id, filename=resume_filename, map_location=device)
         model.load_state_dict(ckpt["model_state_dict"], strict=True)
         optimizer.load_state_dict(ckpt["optimizer_state_dict"])
@@ -239,7 +227,7 @@ if __name__ == "__main__":
         history = ckpt["history"]
         start_epoch = ckpt["epoch"] + 1
         print(f"Checkpoint completo cargado desde HF: {repo_id}/{resume_filename}")
-        print(f"Reanudando desde época {start_epoch + 1}")
+        print(f"desde época {start_epoch + 1}")
 
     elif load_filename is not None: # Finetuning/transfer learning
         loaded = download_model(repo_id=repo_id, filename=load_filename, map_location=device)
@@ -269,6 +257,8 @@ if __name__ == "__main__":
     total_epochs_completadas = last_epoch + 1
 
     final_checkpoint = build_checkpoint(model, optimizer, scheduler, last_epoch, history)
+    if Path("saved_models").exists() is False:
+        Path("saved_models").mkdir(parents=True, exist_ok=True)
     torch.save(final_checkpoint, "saved_models/temp_checkpoint.pth")
     upload_checkpoint_to_hf(final_checkpoint, repo_id=repo_id, filename=save_filename)
     print(f"Checkpoint completo subido a HF: {repo_id}/{save_filename}")
@@ -294,7 +284,7 @@ if __name__ == "__main__":
             "use_checkpoint": use_checkpoint,
             "include_encoder_4": include_encoder_4,
         },
-        phase2_info={
+        phase2_info={ #cuando probamos lama teniamos dos fases, quedo de ahi
             "num_epochs": 0, "lr": 0,
             "T": 0, "sigmoid_k": 0,
             "batch_size": 0, "num_weights": 0
