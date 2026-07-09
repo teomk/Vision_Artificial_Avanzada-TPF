@@ -60,7 +60,6 @@ def run(model, batch, optimizer, device, sar_mode, T=1000, sigmoid_k=10.0):
 
     return loss.item()
 
-
 def fit(model, train_loader, device, sar_mode, optimizer, scheduler, start_epoch=0, num_epochs=50, T=1000, sigmoid_k=10.0, history=None, repo_id=None, save_filename=None, checkpoint_every=None):
 
     if history is None:

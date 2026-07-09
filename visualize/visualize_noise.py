@@ -81,7 +81,7 @@ def build_figure(rows):
     n_cols = max(len(f) for _, _, f, _ in rows)
     n_rows = len(rows)
 
-    fig = plt.figure(figsize=(2.5 * n_cols, 3.2 * n_rows))
+    fig = plt.figure(figsize=(4 * n_cols, 5 * n_rows))
     gs  = gridspec.GridSpec(n_rows, n_cols, figure=fig, hspace=0.4, wspace=0.05)
 
     for row_idx, (title, row_label, frames, stats) in enumerate(rows):
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     if args.save_path is not None:
         if not Path(args.save_path).parent.exists():
             Path(args.save_path).parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(args.save_path, bbox_inches="tight", dpi=150)
+        plt.savefig(args.save_path, bbox_inches="tight", dpi=300)
         print(f"Figura guardada en: {args.save_path}")
     else:
         plt.show()

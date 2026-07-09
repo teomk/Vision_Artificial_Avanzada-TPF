@@ -122,7 +122,7 @@ models:
         psnr: 26.9178
         ssim: 0.781432
         sam: 10.9363
-  dbcr_complex_controlnet:
+  dbcr_complex:
     dbcr_complex_v1:
       filename: dbcr_complex_v1.pth
       eval:

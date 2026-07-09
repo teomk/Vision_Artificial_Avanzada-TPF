@@ -24,7 +24,6 @@ def parse_filename(fname: str) -> tuple[str, str, str, str]:
     num    = parts[-2]
     return roi, season, num, patch
 
-
 def mask_filename(cloudy_name: str) -> str:
     """ROIs1158_spring_s2_cloudy_17_p103.tif → ROIs1158_spring_s2_mask_17_p103.tif"""
     return cloudy_name.replace("_s2_cloudy_", "_s2_mask_")

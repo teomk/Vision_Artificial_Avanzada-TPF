@@ -31,7 +31,7 @@ S1_MEAN = np.array([-8.999908447265625, -14.78221321105957], dtype=np.float32)
 S1_STD = np.array([2.413282871246338, 2.3029115200042725], dtype=np.float32)
 REPO_ID = "LucioLuque/lama"
 T = 1000
-STEPS = 10
+STEPS = 1
 SIGMOID_K = 10.0
 MODEL_TITLE_FONTSIZE = 14
 
@@ -240,7 +240,7 @@ def build_panels_for_entry(entry: dict, models: dict):
 def plot_samples(entries: list[dict], models: dict, show: bool = True):
     n_rows = len(entries)
     n_cols = len(COL_LABELS)
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 5 * n_rows))
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
     if n_rows == 1:
         axes = np.expand_dims(axes, axis=0)
 
@@ -249,9 +249,9 @@ def plot_samples(entries: list[dict], models: dict, show: bool = True):
         row_axes = axes[row_idx]
         for ax, (img, title) in zip(row_axes, panels):
             if img.ndim == 2:
-                ax.imshow(img, cmap="gray", aspect="auto")
+                ax.imshow(img, cmap="gray")
             else:
-                ax.imshow(img, aspect="auto")
+                ax.imshow(img)
             if row_idx == 0:
                 ax.set_title(title, fontsize=MODEL_TITLE_FONTSIZE)
             ax.axis("off")
@@ -263,9 +263,9 @@ def plot_samples(entries: list[dict], models: dict, show: bool = True):
     right=0.99,
     top=0.93,
     bottom=0.02,
-    wspace=0.02,
-    hspace=0.02,
-    )
+    wspace=0.02,   # antes 0.02
+    hspace=0.02,   # antes 0.02
+)
 
     if show:
         plt.show()
@@ -281,7 +281,7 @@ def main():
 
     def resolve_default_save_path(rank_a: int, rank_b: int) -> Path:
         default_dir = ROOT / "visualize" / "outputs"
-        return default_dir / f"dbcr_complex_v7_ranks{rank_a}_{rank_b}.png"
+        return default_dir / f"dbcr_complex_v7_ranks{rank_a}_{rank_b}_2.png"
 
     ranking_path = Path(args.ranking_file)
     entries = [load_ranking_entry(ranking_path, rank_number) for rank_number in args.ranks]
@@ -303,7 +303,7 @@ def main():
     if save_answer in {"s", "si", "sí", "y", "yes"}:
         output_path = resolve_default_save_path(args.ranks[0], args.ranks[1])
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, bbox_inches="tight", dpi=150)
+        fig.savefig(output_path, bbox_inches="tight", dpi=300)
         print(f"Figura guardada en {output_path}")
     else:
         print("Figura no guardada.")

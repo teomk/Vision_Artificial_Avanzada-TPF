@@ -22,9 +22,7 @@ from hf_utils import download_model
 from dbcr_utils import inference
 from dataset_utils import unpack_batch
 from visualize_utils import to_rgb, get_rgb_stats, to_sar
-from evaluate_utils import psnr
 
-# ── Config hardcodeada ────────────────────────────────────────────────
 REPO_ID   = "LucioLuque/lama"
 SEED      = 2
 N_SAMPLES = 2
@@ -117,10 +115,9 @@ def make_figure(models, dataset, device):
             print(f"  clear  : {triple['s2'].name}")
 
             s1, cloudy, clear = dataset[idx]
-            stats = get_rgb_stats(cloudy, clear)
+            stats = get_rgb_stats(cloudy)
 
             preds = []
-            psnr_values = []
 
             for name, cfg in MODELS_CFG.items():
                 pred = run_inference(
@@ -132,10 +129,8 @@ def make_figure(models, dataset, device):
                     device=device,
                 )
 
-                psnr_val = psnr(pred.unsqueeze(0), clear.unsqueeze(0))
 
                 preds.append(pred)
-                psnr_values.append(psnr_val)
 
             sar_img = to_sar(s1, band=0)
 
@@ -154,40 +149,8 @@ def make_figure(models, dataset, device):
                 if row == 0:
                     ax.set_title(COL_LABELS[col], fontsize=10, pad=6)
 
-                if 2 <= col <= 4:
-                    psnr_val = psnr_values[col - 2]
-
-                    ax.text(
-                        0.5,
-                        0.04,
-                        f"PSNR: {psnr_val:.2f} dB",
-                        transform=ax.transAxes,
-                        ha="center",
-                        va="bottom",
-                        fontsize=8,
-                        color="white",
-                        bbox=dict(
-                            facecolor="black",
-                            alpha=0.65,
-                            edgecolor="none",
-                            boxstyle="round,pad=0.25"
-                        )
-                    )
-
-                if col == 0:
-                    ax.text(
-                        -0.08,
-                        0.5,
-                        f"idx={idx}",
-                        transform=ax.transAxes,
-                        ha="right",
-                        va="center",
-                        fontsize=9,
-                        rotation=90
-                    )
-
-    plt.savefig(f"comparacion_modelos.png", bbox_inches="tight", dpi=150)
-    print("Figura guardada en comparacion_modelos.png")
+    plt.savefig(f"imgs/comparacion_modelos2.png", bbox_inches="tight", dpi=150)
+    print("Figura guardada en imgs/comparacion_modelos2.png")
     plt.close()
 
 

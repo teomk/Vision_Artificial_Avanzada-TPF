@@ -58,8 +58,6 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
             else:
                 s1, cloudy, clear = sample
 
-            # unpack_batch espera un batch con dimensión de batch
-            # lo simulamos agregando y sacando la dim 0
             fake_batch = (
                 (s1.unsqueeze(0) if s1 is not None else None),
                 cloudy.unsqueeze(0),

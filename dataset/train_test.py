@@ -79,6 +79,5 @@ def main() -> None:
 
     print("\nListo. Archivos movidos a data/train/")
 
-
 if __name__ == "__main__":
     main()

@@ -37,7 +37,6 @@ def ssim(pred, target, window_size=11, C1=0.01**2, C2=0.03**2):
     return np.mean(scores)
 
 def sam(pred, target, eps=1e-8):
-    """Spectral Angle Mapper — en grados."""
     dot    = (pred * target).sum(dim=1)
     norm_p = pred.norm(dim=1).clamp(min=eps)
     norm_t = target.norm(dim=1).clamp(min=eps)

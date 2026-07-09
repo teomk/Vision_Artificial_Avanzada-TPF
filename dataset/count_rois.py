@@ -67,6 +67,5 @@ def main() -> None:
             print()
     print(f"Total tripletes: {total_triplets_all} — Total imágenes: {total_imgs}")
 
-
 if __name__ == "__main__":
     main()

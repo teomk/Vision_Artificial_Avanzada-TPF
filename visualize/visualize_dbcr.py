@@ -20,7 +20,7 @@ sys.path.append(str(UTILS_DIR))
 from dataset import SEN12MSCRDataset
 from dbcr_simple import DBCRSimple
 from hf_utils import download_model
-from dbcr_simple_utils import inference
+from dbcr_utils import inference
 from visualize_utils import to_rgb, get_rgb_stats, to_sar
 
 def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=1000, steps = 10, sigmoid_k=10.0, save_path=None, seed=17):
