@@ -156,12 +156,12 @@ def register_version(repo_id: str, version: int, filename: str, *, model_name: s
 
     vkey = f"v{version}"
     data["models"][mkey][vkey] = {
-        "filename":   filename,
+        "filename": filename,
         "base_model": base_model,
-        "date":       str(date.today()),
-        "notes":      notes,
-        "phase1":     phase1_info,
-        "phase2":     phase2_info,
+        "date": str(date.today()),
+        "notes": notes,
+        "phase1": phase1_info,
+        "phase2": phase2_info,
     }
 
     _upload_versions_yaml(repo_id, data)

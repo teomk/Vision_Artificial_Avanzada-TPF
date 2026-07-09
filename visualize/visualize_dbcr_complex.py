@@ -100,33 +100,33 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
 if __name__ == "__main__":
     # python visualize/visualize_dbcr_complex.py --config configs/dbcr_complex.yaml
     parser = argparse.ArgumentParser(description="Visualizar predicciones DBCR Complex")
-    parser.add_argument("--config",    type=str, required=True)
-    parser.add_argument("--steps",     type=int, default=10)
+    parser.add_argument("--config", type=str, required=True)
+    parser.add_argument("--steps", type=int, default=10)
     parser.add_argument("--n_samples", type=int, default=4)
     parser.add_argument("--save_path", type=str, default=None)
-    parser.add_argument("--seed",      type=int, default=17)
+    parser.add_argument("--seed", type=int, default=17)
     args = parser.parse_args()
 
     with open(args.config) as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode  = cfg["sar_mode"]
-    repo_id   = cfg["huggingface"]["repo_id"]
-    filename  = cfg["huggingface"]["save_filename"]
-    T         = cfg["train"]["T"]
+    sar_mode = cfg["sar_mode"]
+    repo_id = cfg["huggingface"]["repo_id"]
+    filename = cfg["huggingface"]["save_filename"]
+    T = cfg["train"]["T"]
     sigmoid_k = cfg["train"].get("sigmoid_k", 10.0)
 
     cfg_model = cfg.get("model_args", {})
-    image_channels     = int(cfg_model.get("image_channels", 6))
+    image_channels = int(cfg_model.get("image_channels", 6))
     condition_channels = int(cfg_model.get("condition_channels", 6))
-    sar_channels       = int(cfg_model.get("sar_channels", 2))
-    base_channels      = int(cfg_model.get("base_channels", 64))
-    time_dim           = int(cfg_model.get("time_dim", 128))
-    num_heads          = int(cfg_model.get("num_heads", 1))
-    window_size_sf0     = parse_window(cfg_model.get("window_size_sf0", 8))
+    sar_channels = int(cfg_model.get("sar_channels", 2))
+    base_channels = int(cfg_model.get("base_channels", 64))
+    time_dim = int(cfg_model.get("time_dim", 128))
+    num_heads = int(cfg_model.get("num_heads", 1))
+    window_size_sf0 = parse_window(cfg_model.get("window_size_sf0", 8))
     window_size_not_sf0 = parse_window(cfg_model.get("window_size_not_sf0", None))
-    use_checkpoint     = cfg_model.get("use_checkpoint", True)
-    include_encoder_4  = cfg_model.get("include_encoder_4", False)
+    use_checkpoint = cfg_model.get("use_checkpoint", True)
+    include_encoder_4 = cfg_model.get("include_encoder_4", False)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | SAR: {sar_mode} | Steps: {args.steps}")

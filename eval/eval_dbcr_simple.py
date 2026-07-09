@@ -45,12 +45,12 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
  
     data["models"][mkey][target_vkey]["eval"] = {
         "split": split,
-        "date":  str(date.today()),
+        "date": str(date.today()),
         "steps": steps,
-        "mae":   round(metrics["mae"],  6),
-        "psnr":  round(metrics["psnr"], 4),
-        "ssim":  round(metrics["ssim"], 6),
-        "sam":   round(metrics["sam"],  4),
+        "mae": round(metrics["mae"],  6),
+        "psnr": round(metrics["psnr"], 4),
+        "ssim": round(metrics["ssim"], 6),
+        "sam": round(metrics["sam"],  4),
     }
  
     yaml_path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False))
@@ -70,11 +70,11 @@ if __name__ == "__main__":
         cfg = yaml.safe_load(f)
 
     sar_mode = cfg["sar_mode"]
-    repo_id       = cfg["huggingface"]["repo_id"]
+    repo_id = cfg["huggingface"]["repo_id"]
     save_filename = cfg["huggingface"]["save_filename"]
-    T             = cfg["train"]["T"]
+    T = cfg["train"]["T"]
     sigmoid_k = cfg["train"].get("sigmoid_k", 10.0)
-    batch_size    = cfg["train"]["batch_size"]
+    batch_size = cfg["train"]["batch_size"]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | SAR: {sar_mode} | split: {args.split} | steps: {args.steps}")
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     loaded = download_model(repo_id=repo_id, filename=save_filename, map_location=device)
     checkpoint = (loaded["model_state_dict"] if isinstance(loaded, dict) and "model_state_dict" in loaded else loaded)
 
-    image_channels     = 6
+    image_channels = 6
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     model = DBCRSimple(image_channels=image_channels, condition_channels=condition_channels, base_channels=64, time_dim=128, control_net=(sar_mode == "ControlNet"))

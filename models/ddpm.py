@@ -123,7 +123,7 @@ class ControlNet(nn.Module):
         self.zero_conv_skip1 = nn.Conv2d(base_channels * 2, base_channels * 2, 1)
         self.zero_conv_skip2 = nn.Conv2d(base_channels * 4, base_channels * 4, 1)
         self.zero_conv_skip3 = nn.Conv2d(base_channels * 8, base_channels * 8, 1)
-        self.zero_conv_mid   = nn.Conv2d(base_channels * 8, base_channels * 8, 1)
+        self.zero_conv_mid = nn.Conv2d(base_channels * 8, base_channels * 8, 1)
 
         self._init_zero_convs()
 
@@ -205,7 +205,7 @@ class ConditionalDDPMUNet(nn.Module):
             skip1 = skip1 + residuals["skip1"]
             skip2 = skip2 + residuals["skip2"]
             skip3 = skip3 + residuals["skip3"]
-            x     = x     + residuals["mid"]
+            x = x + residuals["mid"]
 
         x = self.up3(x, skip3, t_emb)
         x = self.up2(x, skip2, t_emb)

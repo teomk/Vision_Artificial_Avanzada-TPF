@@ -35,12 +35,12 @@ class LayerNorm2d(nn.Module):
     def __init__(self, channels, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(1, channels, 1, 1))
-        self.bias   = nn.Parameter(torch.zeros(1, channels, 1, 1))
-        self.eps    = eps
+        self.bias = nn.Parameter(torch.zeros(1, channels, 1, 1))
+        self.eps = eps
 
     def forward(self, x):
         mean = x.mean(dim=1, keepdim=True)
-        var  = x.var(dim=1,  keepdim=True, unbiased=False)
+        var = x.var(dim=1,  keepdim=True, unbiased=False)
         x = (x - mean) / torch.sqrt(var + self.eps)
         return x * self.weight + self.bias
 
@@ -53,26 +53,26 @@ class TimeNAFBlock(nn.Module):
     def __init__(self, channels, time_dim, dw_expand=2, ffn_expand=2):
         super().__init__()
 
-        dw_ch  = channels * dw_expand
+        dw_ch = channels * dw_expand
         ffn_ch = channels * ffn_expand
 
-        self.norm1  = LayerNorm2d(channels)
-        self.conv1  = nn.Conv2d(channels, dw_ch, kernel_size=1)
+        self.norm1 = LayerNorm2d(channels)
+        self.conv1 = nn.Conv2d(channels, dw_ch, kernel_size=1)
         self.dwconv = nn.Conv2d(dw_ch, dw_ch, kernel_size=3, padding=1, groups=dw_ch)
-        self.sg     = SimpleGate()
-        self.sca    = nn.Sequential(
+        self.sg = SimpleGate()
+        self.sca = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(dw_ch // 2, dw_ch // 2, kernel_size=1)
         )
         self.conv2  = nn.Conv2d(dw_ch // 2, channels, kernel_size=1)
         self.time_proj1 = nn.Linear(time_dim, channels)
 
-        self.norm2  = LayerNorm2d(channels)
-        self.conv3  = nn.Conv2d(channels, ffn_ch, kernel_size=1)
-        self.conv4  = nn.Conv2d(ffn_ch // 2, channels, kernel_size=1)
+        self.norm2 = LayerNorm2d(channels)
+        self.conv3 = nn.Conv2d(channels, ffn_ch, kernel_size=1)
+        self.conv4 = nn.Conv2d(ffn_ch // 2, channels, kernel_size=1)
         self.time_proj2 = nn.Linear(time_dim, channels)
 
-        self.beta  = nn.Parameter(torch.zeros(1, channels, 1, 1))
+        self.beta = nn.Parameter(torch.zeros(1, channels, 1, 1))
         self.gamma = nn.Parameter(torch.zeros(1, channels, 1, 1))
 
     def forward(self, x, t_emb):
@@ -98,9 +98,9 @@ class SARFBlock(nn.Module):
     def __init__(self, channels, num_heads=1, window_size=8, mlp_ratio=4):
         super().__init__()
 
-        self.num_heads   = num_heads
+        self.num_heads = num_heads
         self.window_size = window_size
-        self.scale       = (channels // num_heads) ** -0.5
+        self.scale = (channels // num_heads) ** -0.5
 
         self.to_q = nn.Conv2d(channels, channels, kernel_size=1)
         self.to_k = nn.Conv2d(channels, channels, kernel_size=1)
@@ -131,8 +131,8 @@ class SARFBlock(nn.Module):
         return out.permute(0, 1, 3, 2).reshape(B, C, H, W)
 
     def _window_attention(self, Q, K, V, B, C, H, W):
-        ws     = self.window_size
-        hd     = C // self.num_heads
+        ws = self.window_size
+        hd = C // self.num_heads
         nH, nW = H // ws, W // ws
 
         def partition(t):
@@ -180,7 +180,7 @@ class UpBlockNAF(nn.Module):
         super().__init__()
         self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1)
         in_ch_block = out_channels + skip_channels
-        self.proj   = (
+        self.proj = (
             nn.Conv2d(in_ch_block, out_channels, kernel_size=1)
             if in_ch_block != out_channels else nn.Identity()
         )
@@ -205,20 +205,20 @@ class SAREncoderBranch(nn.Module):
         self.in_conv = nn.Conv2d(sar_channels, C, kernel_size=3, padding=1)
 
         self.sar_enc1 = TimeNAFBlock(C,     time_dim)
-        self.down1    = nn.Conv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
+        self.down1 = nn.Conv2d(C, C * 2, kernel_size=3, stride=2, padding=1)
 
         self.sar_enc2 = TimeNAFBlock(C * 2, time_dim)
-        self.down2    = nn.Conv2d(C * 2, C * 4, kernel_size=3, stride=2, padding=1)
+        self.down2 = nn.Conv2d(C * 2, C * 4, kernel_size=3, stride=2, padding=1)
 
         self.sar_enc3 = TimeNAFBlock(C * 4, time_dim)
-        self.down3    = nn.Conv2d(C * 4, C * 8, kernel_size=3, stride=2, padding=1)
+        self.down3 = nn.Conv2d(C * 4, C * 8, kernel_size=3, stride=2, padding=1)
 
         if include_encoder_4:
             self.sar_enc4 = TimeNAFBlock(C * 8, time_dim)
-            self.down4    = nn.Conv2d(C * 8, C * 16, kernel_size=3, stride=2, padding=1)
-            self.mid      = TimeNAFBlock(C * 16, time_dim)
+            self.down4 = nn.Conv2d(C * 8, C * 16, kernel_size=3, stride=2, padding=1)
+            self.mid = TimeNAFBlock(C * 16, time_dim)
         else:
-            self.mid      = TimeNAFBlock(C * 8, time_dim)
+            self.mid = TimeNAFBlock(C * 8, time_dim)
 
     def forward(self, sar, t_emb):
         x1 = self.in_conv(sar)
@@ -243,14 +243,14 @@ class SAREncoderBranch(nn.Module):
             "scale2": x2,
             "scale3": x3,
             "scale4": x4,
-            "mid":    mid,
+            "mid": mid,
         }
 
 class DownNAFSARF(nn.Module):
     def __init__(self, in_channels, down_channels, time_dim, num_heads=1, window_size=None):
         super().__init__()
         self.naf = TimeNAFBlock(in_channels, time_dim)
-        self.sf  = SARFBlock(in_channels, num_heads=num_heads, window_size=window_size)
+        self.sf = SARFBlock(in_channels, num_heads=num_heads, window_size=window_size)
         self.down = nn.Conv2d(in_channels, down_channels, kernel_size=3, stride=2, padding=1)
 
     def forward(self, x, t_emb, sar_feat):
@@ -296,18 +296,18 @@ class DBCR(nn.Module):
             self.enc4 = DownNAFSARF(C*8, C*16, time_dim, num_heads=num_heads, window_size=window_size_not_sf0)
             mid_channels = C * 16
 
-        self.mid1  = TimeNAFBlock(mid_channels, time_dim)
+        self.mid1 = TimeNAFBlock(mid_channels, time_dim)
         self.sf_mid = SARFBlock(mid_channels, num_heads=num_heads, window_size=window_size_not_sf0)
-        self.mid2  = TimeNAFBlock(mid_channels, time_dim)
+        self.mid2 = TimeNAFBlock(mid_channels, time_dim)
 
         if include_encoder_4:
-            self.up4   = UpBlockNAF(C * 16, C * 8, C * 8, time_dim)
+            self.up4 = UpBlockNAF(C * 16, C * 8, C * 8, time_dim)
 
-        self.up3   = UpBlockNAF(C * 8, C * 4, C * 4, time_dim)
-        self.up2   = UpBlockNAF(C * 4, C * 2, C * 2, time_dim)
-        self.up1   = UpBlockNAF(C * 2, C,     C,     time_dim)
+        self.up3 = UpBlockNAF(C * 8, C * 4, C * 4, time_dim)
+        self.up2 = UpBlockNAF(C * 4, C * 2, C * 2, time_dim)
+        self.up1 = UpBlockNAF(C * 2, C,     C,     time_dim)
 
-        self.out   = nn.Conv2d(C, image_channels, kernel_size=3, padding=1)
+        self.out = nn.Conv2d(C, image_channels, kernel_size=3, padding=1)
 
     def _ckpt(self, fn, *args):
         if self.use_checkpoint and self.training:

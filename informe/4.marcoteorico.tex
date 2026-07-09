@@ -1,3 +1,5 @@
+% !TeX root = main.tex
+ 
 \subsection{Modelos difusivos}
 
 Los modelos difusivos constituyen una familia de modelos generativos que aprenden a revertir progresivamente un proceso de degradación. Se definen a partir de dos procesos. El primero, denominado \textit{forward}, es un proceso fijo y no aprendido que agrega ruido gaussiano a la imagen limpia de manera incremental a lo largo de $T$ pasos temporales, hasta que sea ruido puro. El segundo, denominado \textit{reverse}, es el que aprende la red: dada una muestra ruidosa en un paso $t$, el modelo estima el ruido que se le agregó, permitiendo retroceder un paso en la trayectoria.
@@ -20,7 +22,7 @@ donde $\bar{\alpha}_t \in [0,1]$ es un coeficiente acumulado que controla cuánt
 En este trabajo se utilizó un scheduler sigmoidal, cuyo efecto sobre la imagen a lo largo del proceso forward puede observarse en la figura~\ref{fig:ddpm_noise}. Esta elección se basa en lo reportado por Guo et al.\footnote{\url{https://arxiv.org/pdf/2502.04669}}, quienes analizan distintas estrategias de planificación de ruido y señalan que el scheduler sigmoideo puede resultar favorable en imágenes de alta resolución frente a alternativas como el lineal o el coseno. Es consistente además con lo observado en DiffCR\footnote{\url{https://arxiv.org/pdf/2308.04417}}, donde se comparan estos tres schedulers y se reporta que el sigmoideo produce una adición de ruido más suave.
 
 
-Durante el entrenamiento se toma la imagen limpia, se le agrega ruido según la ecuación~\eqref{eq:forward} para un paso $t$ muestreado al azar, y la red aprende a predecir el ruido incorporado. En esta etapa la imagen nublada se utiliza como condición del modelo, de modo que el proceso de reconstrucción esté guiado por la observación óptica disponible.
+Durante el entrenamiento se toma la imagen limpia, se le agrega ruido según la ecuación~\eqref{eq:forward} para un paso $t$ muestreado al azar y la red aprende a predecir el ruido incorporado. En esta etapa la imagen nublada se utiliza como condición del modelo, de modo que el proceso de reconstrucción esté guiado por la observación óptica disponible.
 
 
 \begin{algorithm}[H]
@@ -58,7 +60,7 @@ Durante la inferencia el proceso se invierte. El modelo parte de ruido gaussiano
 
 % En tareas de generación de imágenes, este mecanismo permite modelar distribuciones complejas y producir resultados de alta calidad.
 
-La principal ventaja de los modelos difusivos frente a otros enfoques generativos es su capacidad para producir reconstrucciones de mayor fidelidad y con mejor preservación de detalles finos. Sin embargo, también presentan limitaciones importantes. El proceso de muestreo puede ser costoso, ya que requiere múltiples pasos de denoising, y el entrenamiento suele demandar una cantidad considerable de datos y recursos computacionales. Además, cuando se parte de ruido puro, el camino entre la entrada degradada y la imagen limpia puede resultar innecesariamente largo para una tarea de restauración, porque la imagen nublada ya contiene información útil de la escena.
+La principal ventaja de los modelos difusivos frente a otros enfoques generativos es su capacidad para producir reconstrucciones de mayor fidelidad y con mejor preservación de detalles finos. Sin embargo, también presentan limitaciones importantes. El proceso de muestreo puede ser costoso, ya que requiere múltiples pasos de denoising y el entrenamiento suele demandar una cantidad considerable de datos y recursos computacionales. Además, cuando se parte de ruido puro, el camino entre la entrada degradada y la imagen limpia puede resultar innecesariamente largo para una tarea de restauración, porque la imagen nublada ya contiene información útil de la escena.
 
 
 Esta última observación motiva el uso de variantes más específicas para cloud removal como DB-CR, que busca adaptar la potencia de los modelos difusivos al problema particular de la remoción de nubes.
@@ -153,7 +155,7 @@ Para este trabajo se implementaron distintas arquitecturas, que se describen en 
     \caption{Arquitectura DDPM condicional.}
     \label{fig:DDPM}
 \end{figure}
-La primera arquitectura implementada, corresponde a un modelo DDPM condicional con bloques residuales, como se puede observar en la figura~\ref{fig:DDPM}. Esta arquitectura sigue el algoritmo de entrenamiento (\ref{alg:ddpm_train}) e inferencia (\ref{alg:ddpm_inference}) de un modelo difusivo clásico.  
+La primera arquitectura implementada corresponde a un modelo DDPM condicional con bloques residuales, como se puede observar en la figura~\ref{fig:DDPM}. Esta arquitectura sigue el algoritmo de entrenamiento (\ref{alg:ddpm_train}) e inferencia (\ref{alg:ddpm_inference}) de un modelo difusivo clásico.  
 
 
 \subsubsection{DBCR-S}
@@ -178,7 +180,7 @@ En términos arquitectónicos, como se puede observar en la figura~\ref{fig:DBCR
     \label{fig:NAFT}
 \end{figure}
 
-La figura~\ref{fig:NAFT} muestra la estructura interna del bloque NAFT. El bloque está compuesto por dos ramas residuales: una primera rama tipo NAF, encargada de la extracción espacial de características, y una segunda rama tipo FFN convolucional. En ambas ramas se incorpora una proyección lineal del embedding temporal, lo que permite condicionar el bloque según el paso temporal del proceso difusivo.
+La figura~\ref{fig:NAFT} muestra la estructura interna del bloque NAFT. El bloque está compuesto por dos ramas residuales: una primera rama tipo NAF, encargada de la extracción espacial de características y una segunda rama tipo FFN convolucional. En ambas ramas se incorpora una proyección lineal del embedding temporal, lo que permite condicionar el bloque según el paso temporal del proceso difusivo.
 
 Las ramas NAF y FFN se incorporan mediante conexiones residuales escaladas por los parámetros aprendibles $\beta$ y $\gamma$. Estos permiten controlar cuánto aporta cada rama residual a la salida del bloque. Al inicializarse en cero, el bloque comienza comportándose de manera cercana a una identidad, lo que ayuda a estabilizar el entrenamiento.
 
@@ -285,7 +287,7 @@ donde comúnmente se utiliza $\alpha=\beta=\gamma=1$, lo cual simplifica la ecua
 \end{equation}
 siendo $\mu_x,\mu_y$ las medias locales de los parches, $\sigma_x^2, \sigma_y^2$ sus varianzas locales, $\sigma_{xy}$ la covarianza local y $C_1, C_2$ constantes pequeñas para estabilizar la división cuando el denominador es cercano a cero. En esta métrica, valores más altos indican una mayor similitud estructural entre la imagen predicha y la imagen de referencia.
 
-Finalmente, se utilizó la métrica \textit{Spectral Angle Mapper} (SAM), propuesta originalmente en el contexto del análisis de imágenes espectrales por Kruse et al. (1993)\footnote{\url{https://ui.adsabs.harvard.edu/abs/1993RSEnv..44..145K/abstract}}, y especialmente relevante en imágenes multiespectrales. A diferencia de MAE, PSNR o SSIM, que comparan principalmente diferencias espaciales o estructurales, SAM evalúa la similitud espectral entre dos imágenes. Para ello, considera cada píxel como un vector formado por sus valores en los distintos canales espectrales y calcula el ángulo entre el vector predicho y el vector de referencia.
+Finalmente, se utilizó la métrica \textit{Spectral Angle Mapper} (SAM), propuesta originalmente en el contexto del análisis de imágenes espectrales por Kruse et al. (1993)\footnote{\url{https://ui.adsabs.harvard.edu/abs/1993RSEnv..44..145K/abstract}} y especialmente relevante en imágenes multiespectrales. A diferencia de MAE, PSNR o SSIM, que comparan principalmente diferencias espaciales o estructurales, SAM evalúa la similitud espectral entre dos imágenes. Para ello, considera cada píxel como un vector formado por sus valores en los distintos canales espectrales y calcula el ángulo entre el vector predicho y el vector de referencia.
 
 \begin{equation}
 \theta_{ij} =

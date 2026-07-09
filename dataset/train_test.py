@@ -5,27 +5,27 @@ import shutil
 
 SEASONS = {"spring", "summer", "fall", "autumn", "winter"}
 
-S1_TEST     = Path("data/test/south_america_s1")
-S2_TEST     = Path("data/test/south_america_s2")
+S1_TEST = Path("data/test/south_america_s1")
+S2_TEST = Path("data/test/south_america_s2")
 CLOUDY_TEST = Path("data/test/south_america_s2_cloudy")
 
-S1_TRAIN     = Path("data/train/south_america_s1")
-S2_TRAIN     = Path("data/train/south_america_s2")
+S1_TRAIN = Path("data/train/south_america_s1")
+S2_TRAIN = Path("data/train/south_america_s2")
 CLOUDY_TRAIN = Path("data/train/south_america_s2_cloudy")
 
 TEST_ACQUISITIONS = {
     "spring": "44",
     "summer": "146",
-    "fall":   "85",
+    "fall": "85",
     "winter": "64",
 }
 def parse_filename(fname: str) -> tuple[str, str, str, str]:
     name = fname.replace(".tif", "")
     parts = name.split("_")
-    roi    = parts[0]
+    roi = parts[0]
     season = parts[1]
-    patch  = parts[-1]
-    num    = parts[-2]
+    patch = parts[-1]
+    num = parts[-2]
     return roi, season, num, patch
 
 
@@ -42,8 +42,8 @@ def build_index(folder: Path) -> dict:
 
 
 def main() -> None:
-    s1_idx     = build_index(S1_TEST)
-    s2_idx     = build_index(S2_TEST)
+    s1_idx = build_index(S1_TEST)
+    s2_idx = build_index(S2_TEST)
     cloudy_idx = build_index(CLOUDY_TEST)
 
     triples = set(s1_idx) & set(s2_idx) & set(cloudy_idx)
@@ -54,7 +54,7 @@ def main() -> None:
         folder.mkdir(parents=True, exist_ok=True)
 
     to_train = set()
-    to_keep  = set()
+    to_keep = set()
     for key in triples:
         roi, season, num, patch = key
         if TEST_ACQUISITIONS.get(season) == num:

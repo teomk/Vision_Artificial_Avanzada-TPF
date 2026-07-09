@@ -36,23 +36,23 @@ def visualize_samples(model, dataset, device, scheduler, sar_mode="None", n_samp
         for row, idx in enumerate(tqdm(indices, desc="Muestras", unit="img")):
             if sar_mode == "None":
                 cloudy, clear = dataset[idx]
-                cloudy_b  = cloudy.unsqueeze(0).float().to(device)
+                cloudy_b = cloudy.unsqueeze(0).float().to(device)
                 condition = cloudy_b
-                sar       = None
+                sar = None
 
             elif sar_mode == "Concat":
                 s1, cloudy, clear = dataset[idx]
-                cloudy_b  = cloudy.unsqueeze(0).float().to(device)
-                s1_b      = s1.unsqueeze(0).float().to(device)
+                cloudy_b = cloudy.unsqueeze(0).float().to(device)
+                s1_b = s1.unsqueeze(0).float().to(device)
                 condition = torch.cat([cloudy_b, s1_b], dim=1)  # [1, 8, H, W]
-                sar       = None
+                sar = None
 
             elif sar_mode == "ControlNet":
                 s1, cloudy, clear = dataset[idx]
-                cloudy_b  = cloudy.unsqueeze(0).float().to(device)
-                s1_b      = s1.unsqueeze(0).float().to(device)
+                cloudy_b = cloudy.unsqueeze(0).float().to(device)
+                s1_b = s1.unsqueeze(0).float().to(device)
                 condition = cloudy_b                             # [1, 6, H, W]
-                sar       = s1_b                                 # [1, 2, H, W]
+                sar = s1_b                                 # [1, 2, H, W]
 
             else:
                 raise ValueError(f"sar_mode desconocido: '{sar_mode}'")
@@ -92,20 +92,20 @@ if __name__ == "__main__":
     # python visualize/visualize_ddpm.py --config configs/ddpm_controlnet.yaml
 
     parser = argparse.ArgumentParser(description="Visualizar predicciones ConditionalDDPMUNet")
-    parser.add_argument("--config",    type=str, required=True,  help="Ruta al config YAML")
-    parser.add_argument("--steps",     type=int, default=10,     help="Pasos de inferencia DDPM (default: 50)")
-    parser.add_argument("--n_samples", type=int, default=4,      help="Cantidad de muestras (default: 4)")
-    parser.add_argument("--save_path", type=str, default=None,   help="Ruta para guardar la figura")
-    parser.add_argument("--seed",      type=int, default=17,     help="Semilla (default: 17)")
+    parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
+    parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia DDPM (default: 50)")
+    parser.add_argument("--n_samples", type=int, default=4, help="Cantidad de muestras (default: 4)")
+    parser.add_argument("--save_path", type=str, default=None, help="Ruta para guardar la figura")
+    parser.add_argument("--seed", type=int, default=17, help="Semilla (default: 17)")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode      = cfg["sar_mode"]
-    repo_id       = cfg["huggingface"]["repo_id"]
+    sar_mode = cfg["sar_mode"]
+    repo_id = cfg["huggingface"]["repo_id"]
     save_filename = cfg["huggingface"]["save_filename"]
-    T             = cfg["train"]["T"]
+    T = cfg["train"]["T"]
     sigmoid_k =cfg["train"].get("sigmoid_k", 25.0),
     alpha_min =cfg["train"].get("alpha_min", 1e-4)
 
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     checkpoint = download_model(repo_id=repo_id, filename=save_filename, map_location=device)
 
-    image_channels     = 6
+    image_channels = 6
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     model = ConditionalDDPMUNet(

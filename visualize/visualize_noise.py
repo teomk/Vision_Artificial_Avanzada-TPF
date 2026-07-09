@@ -107,11 +107,11 @@ def load_sample(dataset, idx, sar_mode, device):
 
     elif sar_mode == "Concat":
         s1, cloudy, clear = dataset[idx]
-        cloudy_b  = cloudy.unsqueeze(0).float().to(device)
+        cloudy_b = cloudy.unsqueeze(0).float().to(device)
 
     elif sar_mode == "ControlNet":
         s1, cloudy, clear = dataset[idx]
-        cloudy_b  = cloudy.unsqueeze(0).float().to(device)
+        cloudy_b = cloudy.unsqueeze(0).float().to(device)
 
     else:
         raise ValueError(f"sar_mode desconocido: '{sar_mode}'")
@@ -125,11 +125,11 @@ if __name__ == "__main__":
     # python visualize/visualize_noise.py --config configs/ddpm_none.yaml --idx 100 --save_path imgs/ddpm_noise.png
 
     parser = argparse.ArgumentParser(description="Visualizar proceso de ruido")
-    parser.add_argument("--config",    type=str, required=True, help="Ruta al config YAML")
-    parser.add_argument("--frame_every",  type=int, default=100, help="Frames cada n frames")
-    parser.add_argument("--idx",       type=int, default=0, help="Índice de muestra del dataset")
+    parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
+    parser.add_argument("--frame_every", type=int, default=100, help="Frames cada n frames")
+    parser.add_argument("--idx", type=int, default=0, help="Índice de muestra del dataset")
     parser.add_argument("--save_path", type=str, default=None, help="Ruta para guardar la figura")
-    parser.add_argument("--seed",      type=int, default=17, help="Seed")
+    parser.add_argument("--seed", type=int, default=17, help="Seed")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -138,9 +138,9 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    model_type    = cfg["model"]
-    sar_mode      = cfg["sar_mode"]
-    T             = cfg["train"]["T"]
+    model_type = cfg["model"]
+    sar_mode = cfg["sar_mode"]
+    T = cfg["train"]["T"]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | Model: {model_type} | SAR: {sar_mode}")

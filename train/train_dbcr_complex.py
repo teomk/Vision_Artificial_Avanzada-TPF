@@ -10,7 +10,7 @@ import yaml
 import argparse
 from torch.utils.data import DataLoader
 
-ROOT     = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "dataset"
 MODELS_DIR = ROOT / "models"
 UTILS_DIR = ROOT / "utils"
@@ -133,17 +133,17 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode    = cfg["sar_mode"]
-    cfg_train   = cfg["train"]
-    cfg_model   = cfg.get("model_args", {})
-    cfg_hf      = cfg["huggingface"]
+    sar_mode = cfg["sar_mode"]
+    cfg_train = cfg["train"]
+    cfg_model = cfg.get("model_args", {})
+    cfg_hf = cfg["huggingface"]
 
-    batch_size  = cfg_train["batch_size"]
+    batch_size = cfg_train["batch_size"]
     num_workers = cfg_train["num_workers"]
-    num_epochs  = cfg_train["num_epochs"]
-    lr          = cfg_train["lr"]
-    T           = cfg_train["T"]
-    sigmoid_k   = cfg_train["sigmoid_k"]
+    num_epochs = cfg_train["num_epochs"]
+    lr = cfg_train["lr"]
+    T = cfg_train["T"]
+    sigmoid_k = cfg_train["sigmoid_k"]
 
     # load_filename: carga solo pesos es para transfer/finetune
     load_filename = cfg_train.get("load_filename")
@@ -155,22 +155,22 @@ if __name__ == "__main__":
 
     checkpoint_every = cfg_train.get("checkpoint_every")  # opcional
 
-    repo_id       = cfg_hf["repo_id"]
+    repo_id = cfg_hf["repo_id"]
     save_filename = cfg_hf["save_filename"]
-    version       = cfg_hf["version"]
-    notes         = cfg_hf["notes"]
+    version = cfg_hf["version"]
+    notes = cfg_hf["notes"]
 
     # Arquitectura
-    image_channels      = cfg_model.get("image_channels", 6)
-    condition_channels  = cfg_model.get("condition_channels", 6)
-    sar_channels        = cfg_model.get("sar_channels", 2)
-    base_channels       = cfg_model.get("base_channels", 64)
-    time_dim            = cfg_model.get("time_dim", 128)
-    num_heads           = cfg_model.get("num_heads", 1)
-    window_size_sf0     = parse_window(cfg_model.get("window_size_sf0", 8))
+    image_channels = cfg_model.get("image_channels", 6)
+    condition_channels = cfg_model.get("condition_channels", 6)
+    sar_channels = cfg_model.get("sar_channels", 2)
+    base_channels = cfg_model.get("base_channels", 64)
+    time_dim = cfg_model.get("time_dim", 128)
+    num_heads = cfg_model.get("num_heads", 1)
+    window_size_sf0 = parse_window(cfg_model.get("window_size_sf0", 8))
     window_size_not_sf0 = parse_window(cfg_model.get("window_size_not_sf0", None))
-    use_checkpoint      = cfg_model.get("use_checkpoint", True)
-    include_encoder_4   = cfg_model.get("include_encoder_4", False)
+    use_checkpoint = cfg_model.get("use_checkpoint", True)
+    include_encoder_4 = cfg_model.get("include_encoder_4", False)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device} | SAR Mode: {sar_mode} | Epochs a correr: {num_epochs}")

@@ -3,7 +3,7 @@ from collections import defaultdict
 from pathlib import Path
 
 SEASONS = {"spring", "summer", "fall", "autumn", "winter"}
-ROOT    = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent
 
 def get_folder_paths(split: str) -> tuple[dict, dict, dict]:
     s1_path = ROOT / "data" / split / "south_america_s1"

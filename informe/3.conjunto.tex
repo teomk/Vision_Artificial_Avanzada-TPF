@@ -1,3 +1,5 @@
+% !TeX root = main.tex
+
 Se trabajó con el conjunto de datos SEN12MS-CR\footnote{\url{https://patricktum.github.io/cloud_removal/sen12mscr/}}, un dataset multimodal diseñado específicamente para tareas de remoción de nubes en imágenes satelitales. Este conjunto de datos contiene muestras provenientes de 175 regiones de interés (\textit{Regions of Interest}, ROI) distribuidas globalmente, capturadas durante una de las cuatro estaciones del año a lo largo de 2018.
 
 % \begin{figure}[H]
@@ -13,7 +15,7 @@ Se trabajó con el conjunto de datos SEN12MS-CR\footnote{\url{https://patricktum
     \includegraphics[width=\columnwidth]{../imgs/triplete.png}
     \caption{Ejemplo de triplete del dataset SEN12MS-CR. De izquierda a derecha: imagen SAR de Sentinel-1 (2 canales), imagen nublada y limpia de Sentinel-2 (13 canales).}
     \label{fig:triplete}
-\end{figure}
+\end{figure} 
 
 
 Cada región dispone de múltiples muestras, donde cada una está compuesta por un triplete de imágenes: una imagen SAR adquirida por el satélite Sentinel-1, una imagen multiespectral de Sentinel-2 en la que se presentan nubes y su correspondiente imagen multiespectral libre de nubes como se puede observar en la figura~\ref{fig:triplete}. Estas muestras fueron obtenidas a partir de la misión Copernicus de la Agencia Espacial Europea (ESA). Dado que las imágenes nubladas y de referencia no necesariamente corresponden a la misma fecha de adquisición, pueden observarse diferencias en el estado de la vegetación entre ambas. Esto introduce cierta ambigüedad en la tarea de reconstrucción, ya que la imagen objetivo puede reflejar condiciones distintas a las presentes en la imagen de entrada.

@@ -42,23 +42,23 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
         for row, idx in enumerate(tqdm(indices, desc="Samples", unit="sample")):
             if sar_mode == "None":
                 cloudy, clear = dataset[idx]
-                cloudy_b  = cloudy.unsqueeze(0).float().to(device)
+                cloudy_b = cloudy.unsqueeze(0).float().to(device)
                 condition = cloudy_b
-                sar       = None
+                sar = None
  
             elif sar_mode == "Concat":
                 s1, cloudy, clear = dataset[idx]
-                cloudy_b  = cloudy.unsqueeze(0).float().to(device)
-                s1_b      = s1.unsqueeze(0).float().to(device)
+                cloudy_b = cloudy.unsqueeze(0).float().to(device)
+                s1_b = s1.unsqueeze(0).float().to(device)
                 condition = torch.cat([cloudy_b, s1_b], dim=1)  # [1, 8, H, W]
-                sar       = None
+                sar = None
  
             elif sar_mode == "ControlNet":
                 s1, cloudy, clear = dataset[idx]
-                cloudy_b  = cloudy.unsqueeze(0).float().to(device)
-                s1_b      = s1.unsqueeze(0).float().to(device)
+                cloudy_b = cloudy.unsqueeze(0).float().to(device)
+                s1_b = s1.unsqueeze(0).float().to(device)
                 condition = cloudy_b                             # [1, 6, H, W]
-                sar       = s1_b                                 # [1, 2, H, W]
+                sar = s1_b                                 # [1, 2, H, W]
  
             else:
                 raise ValueError(f"sar_mode desconocido: '{sar_mode}'")
@@ -106,10 +106,10 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode      = cfg["sar_mode"]
-    repo_id       = cfg["huggingface"]["repo_id"]
+    sar_mode = cfg["sar_mode"]
+    repo_id = cfg["huggingface"]["repo_id"]
     save_filename = cfg["huggingface"]["save_filename"]
-    T             = cfg["train"]["T"]
+    T = cfg["train"]["T"]
     sigmoid_k = cfg["train"].get("sigmoid_k", 10.0)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

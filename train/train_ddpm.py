@@ -8,10 +8,10 @@ import yaml
 import argparse
 from torch.utils.data import DataLoader
 
-ROOT       = Path(__file__).resolve().parent.parent
-DATA_DIR   = ROOT / "dataset"
+ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT / "dataset"
 MODELS_DIR = ROOT / "models"
-UTILS_DIR  = ROOT / "utils"
+UTILS_DIR = ROOT / "utils"
 
 sys.path.append(str(DATA_DIR))
 sys.path.append(str(MODELS_DIR))
@@ -85,27 +85,27 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode  = cfg["sar_mode"]
+    sar_mode = cfg["sar_mode"]
     cfg_train = cfg["train"]
-    cfg_hf    = cfg["huggingface"]
+    cfg_hf = cfg["huggingface"]
 
-    batch_size    = cfg_train["batch_size"]
-    num_workers   = cfg_train["num_workers"]
-    num_epochs    = cfg_train["num_epochs"]
-    lr            = cfg_train["lr"]
-    T             = cfg_train["T"]
+    batch_size = cfg_train["batch_size"]
+    num_workers = cfg_train["num_workers"]
+    num_epochs = cfg_train["num_epochs"]
+    lr = cfg_train["lr"]
+    T = cfg_train["T"]
     load_filename = cfg_train.get("load_filename")
-    load_filename = None if load_filename in (None, "None") else load_filename
+    load_filename = None if load_filename in (None, "None") else load_filename 
 
-    repo_id       = cfg_hf["repo_id"]
+    repo_id = cfg_hf["repo_id"]
     save_filename = cfg_hf["save_filename"]
-    version       = cfg_hf["version"]
-    notes         = cfg_hf["notes"]
+    version = cfg_hf["version"]
+    notes = cfg_hf["notes"]
 
     # Arquitectura
-    image_channels     = 6
-    base_channels      = 64
-    time_dim           = 128
+    image_channels = 6
+    base_channels = 64
+    time_dim = 128
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

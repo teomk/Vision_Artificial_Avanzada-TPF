@@ -22,9 +22,9 @@ def ssim(pred, target, window_size=11, C1=0.01**2, C2=0.03**2):
         mu_p = torch.nn.functional.avg_pool2d(p, window_size, stride=1, padding=window_size//2)
         mu_t = torch.nn.functional.avg_pool2d(t, window_size, stride=1, padding=window_size//2)
 
-        mu_p2  = mu_p ** 2
-        mu_t2  = mu_t ** 2
-        mu_pt  = mu_p * mu_t
+        mu_p2 = mu_p ** 2
+        mu_t2 = mu_t ** 2
+        mu_pt = mu_p * mu_t
 
         sigma_p2 = torch.nn.functional.avg_pool2d(p*p, window_size, stride=1, padding=window_size//2) - mu_p2
         sigma_t2 = torch.nn.functional.avg_pool2d(t*t, window_size, stride=1, padding=window_size//2) - mu_t2
@@ -37,11 +37,11 @@ def ssim(pred, target, window_size=11, C1=0.01**2, C2=0.03**2):
     return np.mean(scores)
 
 def sam(pred, target, eps=1e-8):
-    dot    = (pred * target).sum(dim=1)
+    dot = (pred * target).sum(dim=1)
     norm_p = pred.norm(dim=1).clamp(min=eps)
     norm_t = target.norm(dim=1).clamp(min=eps)
-    cos    = (dot / (norm_p * norm_t)).clamp(-1, 1)
-    angle  = torch.acos(cos)
+    cos = (dot / (norm_p * norm_t)).clamp(-1, 1)
+    angle = torch.acos(cos)
     return torch.rad2deg(angle).mean().item()
 
 def _count_nonfinite(x):
@@ -77,17 +77,17 @@ def evaluate(inference, model, loader, sar_mode, device, T=1000, steps=10, sigmo
                 print(f"Batch {batch_idx}: predicción con {bad_pred} valores no finitos. Se omite.")
                 continue
 
-            total_mae  += mae(pred, s2_clean)
+            total_mae += mae(pred, s2_clean)
             total_psnr += psnr(pred, s2_clean)
             total_ssim += ssim(pred, s2_clean)
-            total_sam  += sam(pred, s2_clean)
-            n_batches  += 1
+            total_sam += sam(pred, s2_clean)
+            n_batches += 1
 
     metrics = {
-        "mae":  float(total_mae  / n_batches),
+        "mae": float(total_mae  / n_batches),
         "psnr": float(total_psnr / n_batches),
         "ssim": float(total_ssim / n_batches),
-        "sam":  float(total_sam  / n_batches),
+        "sam": float(total_sam  / n_batches),
     }
 
     print(f"\n{'='*40}")

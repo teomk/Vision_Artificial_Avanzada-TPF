@@ -4,25 +4,25 @@ def unpack_batch(batch, sar_mode, device):
     if sar_mode == "None":
         s2_cloudy, s2_clean = batch
         s2_cloudy = s2_cloudy.to(device)
-        s2_clean  = s2_clean.to(device)
+        s2_clean = s2_clean.to(device)
         condition = s2_cloudy
-        sar       = None
+        sar = None
 
     elif sar_mode == "Concat":
         s1, s2_cloudy, s2_clean = batch
-        s1        = s1.to(device)
+        s1 = s1.to(device)
         s2_cloudy = s2_cloudy.to(device)
-        s2_clean  = s2_clean.to(device)
+        s2_clean = s2_clean.to(device)
         condition = torch.cat([s2_cloudy, s1], dim=1)   # [B, 8, H, W]
-        sar       = None
+        sar = None
 
     elif sar_mode == "ControlNet":
         s1, s2_cloudy, s2_clean = batch
-        s1        = s1.to(device)
+        s1 = s1.to(device)
         s2_cloudy = s2_cloudy.to(device)
-        s2_clean  = s2_clean.to(device)
+        s2_clean = s2_clean.to(device)
         condition = s2_cloudy
-        sar       = s1
+        sar = s1
 
     else:
         raise ValueError(f"sar_mode desconocido: '{sar_mode}'")

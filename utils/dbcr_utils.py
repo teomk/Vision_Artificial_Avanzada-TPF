@@ -2,8 +2,8 @@ import torch
 from tqdm import tqdm
 
 def sigmoid_scheduler(T, sigmoid_k, t, device):
-    tau   = torch.clamp(t.float() / T, 0.0, 1.0)
-    s     = torch.sigmoid((tau - 0.5) * sigmoid_k)
+    tau = torch.clamp(t.float() / T, 0.0, 1.0)
+    s = torch.sigmoid((tau - 0.5) * sigmoid_k)
     s_min = torch.sigmoid(torch.tensor(-0.5 * sigmoid_k, device=device))
     s_max = torch.sigmoid(torch.tensor( 0.5 * sigmoid_k, device=device))
     alpha = torch.clamp((s - s_min) / (s_max - s_min), 0.0, 1.0)

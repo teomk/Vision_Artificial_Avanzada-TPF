@@ -23,17 +23,17 @@ from dbcr_utils import inference
 from dataset_utils import unpack_batch
 from visualize_utils import to_rgb, get_rgb_stats, to_sar
 
-REPO_ID   = "LucioLuque/lama"
-SEED      = 2
+REPO_ID = "LucioLuque/lama"
+SEED = 2
 N_SAMPLES = 2
-STEPS     = 1
-T         = 1000
+STEPS = 1
+T = 1000
 SIGMOID_K = 10.0
 
 MODELS_CFG = {
-    "DBCR-S":          {"filename": "dbcr_no_sar_naf_v2.pth",  "sar_mode": "None",   "type": "simple"},
-    "DBCR-SC (sin TL)":{"filename": "dbcr_concat_v2.pth",      "sar_mode": "Concat", "type": "simple"},
-    "DBCR":            {"filename": "dbcr_complex_v7.pth",      "sar_mode": "ControlNet", "type": "complex"},
+    "DBCR-S":          {"filename": "dbcr_no_sar_naf_v2.pth", "sar_mode": "None",   "type": "simple"},
+    "DBCR-SC (sin TL)":{"filename": "dbcr_concat_v2.pth", "sar_mode": "Concat", "type": "simple"},
+    "DBCR":            {"filename": "dbcr_complex_v7.pth", "sar_mode": "ControlNet", "type": "complex"},
 }
 
 COL_LABELS = ["SAR", "Nublada", "DBCR-S", "DBCR-SC (sin TL)", "DBCR", "Original"]
@@ -159,9 +159,9 @@ if __name__ == "__main__":
 
     print("Cargando modelos...")
     models = {
-        "DBCR-S":           load_simple("dbcr_no_sar_naf_v2.pth",  sar_mode="None",        device=device),
-        "DBCR-SC (sin TL)": load_simple("dbcr_concat_v2.pth",      sar_mode="Concat",      device=device),
-        "DBCR":             load_complex("dbcr_complex_v7.pth",                             device=device),
+        "DBCR-S": load_simple("dbcr_no_sar_naf_v2.pth", sar_mode="None", device=device),
+        "DBCR-SC (sin TL)": load_simple("dbcr_concat_v2.pth", sar_mode="Concat", device=device),
+        "DBCR": load_complex("dbcr_complex_v7.pth", device=device),
     }
 
     ds = SEN12MSCRDataset(split="test", include_s1=True, include_mask=False)

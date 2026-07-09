@@ -33,11 +33,11 @@ def evaluate(model, loader, sar_mode, device, scheduler, steps=50):
         for batch in tqdm(loader, desc="Evaluando", unit="batch"):
             s2_cloudy, s2_clean, condition, sar = unpack_batch(batch, sar_mode, device)
             pred = inference(model, condition, device, scheduler, steps=steps, sar=sar).clamp(0, 1)
-            total_mae  += mae(pred, s2_clean)
+            total_mae += mae(pred, s2_clean)
             total_psnr += psnr(pred, s2_clean)
             total_ssim += ssim(pred, s2_clean)
-            total_sam  += sam(pred, s2_clean)
-            n_batches  += 1
+            total_sam += sam(pred, s2_clean)
+            n_batches += 1
             # break
 
     metrics = {
@@ -78,12 +78,12 @@ def register_eval(filename, *, metrics, split, sar_mode, steps, yaml_path="eval/
 
     data["models"][mkey][target_vkey]["eval"] = {
         "split": split,
-        "date":  str(date.today()),
+        "date": str(date.today()),
         "steps": steps,
-        "mae":   round(metrics["mae"],  6),
-        "psnr":  round(metrics["psnr"], 4),
-        "ssim":  round(metrics["ssim"], 6),
-        "sam":   round(metrics["sam"],  4),
+        "mae": round(metrics["mae"],  6),
+        "psnr": round(metrics["psnr"], 4),
+        "ssim": round(metrics["ssim"], 6),
+        "sam": round(metrics["sam"],  4),
     }
 
     yaml_path.write_text(yaml.dump(data, allow_unicode=True, sort_keys=False))
@@ -103,8 +103,8 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode      = cfg["sar_mode"]
-    repo_id       = cfg["huggingface"]["repo_id"]
+    sar_mode = cfg["sar_mode"]
+    repo_id = cfg["huggingface"]["repo_id"]
     save_filename = cfg["huggingface"]["save_filename"]
     T = int(cfg["train"]["T"])
     sigmoid_k = float(cfg["train"].get("sigmoid_k", 25.0))
@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
     checkpoint = download_model(repo_id=repo_id, filename=save_filename, map_location=device)
 
-    image_channels     = 6
+    image_channels = 6
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     model = ConditionalDDPMUNet(

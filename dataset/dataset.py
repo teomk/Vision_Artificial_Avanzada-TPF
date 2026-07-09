@@ -9,19 +9,19 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 S1_MEAN_DEFAULT = np.array([-8.999908447265625, -14.78221321105957], dtype=np.float32)
-S1_STD_DEFAULT  = np.array([2.413282871246338, 2.3029115200042725], dtype=np.float32)
+S1_STD_DEFAULT = np.array([2.413282871246338, 2.3029115200042725], dtype=np.float32)
 
 BANDS = [2, 3, 4, 8, 12, 13]
 BANDS_TOTAL = [1,2,3,4,5,6,7,8,9,10,11,12,13]
 
 def parse_filename(fname: str) -> tuple[str, str, str, str]:
     """ROIs1158_spring_s2_cloudy_17_p103.tif → (roi, season, num, patch)"""
-    name  = fname.replace(".tif", "")
+    name = fname.replace(".tif", "")
     parts = name.split("_")
-    roi    = parts[0]
+    roi = parts[0]
     season = parts[1]
-    patch  = parts[-1]
-    num    = parts[-2]
+    patch = parts[-1]
+    num = parts[-2]
     return roi, season, num, patch
 
 def mask_filename(cloudy_name: str) -> str:
@@ -39,8 +39,8 @@ def build_triple_index(s1_folder: Path, s2_folder: Path, cloudy_folder: Path, ma
                 pass
         return idx
 
-    s1_idx     = index_folder(s1_folder)
-    s2_idx     = index_folder(s2_folder)
+    s1_idx = index_folder(s1_folder)
+    s2_idx = index_folder(s2_folder)
     cloudy_idx = index_folder(cloudy_folder)
 
     mask_idx = {}
@@ -58,11 +58,11 @@ def build_triple_index(s1_folder: Path, s2_folder: Path, cloudy_folder: Path, ma
 
     triples = [
         {
-            "key":    key,
-            "s1":     s1_idx[key],
-            "s2":     s2_idx[key],
+            "key": key,
+            "s1": s1_idx[key],
+            "s2": s2_idx[key],
             "cloudy": cloudy_idx[key],
-            "mask":   mask_idx[key],
+            "mask": mask_idx[key],
         }
         for key in sorted(valid_keys)
     ]
@@ -80,18 +80,18 @@ class SEN12MSCRDataset(Dataset):
         include_mask: bool = False, #Esta la opcion de recibir mascaras de nubes cuando estabamos probando adaptar lama, para el resto de modelos no se usaron.
         total_bands = False
     ):
-        self.split      = split
+        self.split = split
         self.include_s1 = include_s1
         self.include_mask = include_mask
-        self.s1_mean    = s1_mean
-        self.s1_std     = s1_std
+        self.s1_mean = s1_mean
+        self.s1_std = s1_std
         self.total_bands = total_bands
 
-        root          = base_dir / "data" / split
-        s1_folder     = root / "south_america_s1"
-        s2_folder     = root / "south_america_s2"
+        root = base_dir / "data" / split
+        s1_folder = root / "south_america_s1"
+        s2_folder = root / "south_america_s2"
         cloudy_folder = root / "south_america_s2_cloudy"
-        masks_folder  = root / "south_america_s2_masks"
+        masks_folder = root / "south_america_s2_masks"
 
         self.triples = build_triple_index(s1_folder, s2_folder, cloudy_folder, masks_folder)
 
@@ -117,24 +117,24 @@ class SEN12MSCRDataset(Dataset):
         with rasterio.open(triple["mask"]) as src:
             mask_raw = src.read().astype(np.float32)        # [1, H, W]
 
-        s2_clear = np.clip(s2_raw    / 10000.0, 0, 1)
+        s2_clear = np.clip(s2_raw / 10000.0, 0, 1)
         s2_cloudy = np.clip(cloudy_raw / 10000.0, 0, 1)
 
         if self.s1_mean is not None and self.s1_std is not None:
             mean = self.s1_mean[:, None, None]
-            std  = self.s1_std[:, None, None]
-            s1   = (s1_raw - mean) / (std + 1e-6)
+            std = self.s1_std[:, None, None]
+            s1 = (s1_raw - mean) / (std + 1e-6)
         else:
             s1 = s1_raw / 10000.0
 
         mask = mask_raw
 
         sample = {
-            "s1":       torch.from_numpy(s1),
+            "s1": torch.from_numpy(s1),
             "s2_clear": torch.from_numpy(s2_clear),
-            "s2_cloudy":torch.from_numpy(s2_cloudy),
-            "mask":     torch.from_numpy(mask),
-            "key":      str(triple["key"]),
+            "s2_cloudy": torch.from_numpy(s2_cloudy),
+            "mask": torch.from_numpy(mask),
+            "key": str(triple["key"]),
         }
 
         if self.include_s1:

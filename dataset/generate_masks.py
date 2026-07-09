@@ -12,11 +12,11 @@ OTSU_OFFSET = -0.03
 SPLITS = {
     "train": {
         "cloudy": Path("data/train/south_america_s2_cloudy"),
-        "masks":  Path("data/train/south_america_s2_masks"),
+        "masks": Path("data/train/south_america_s2_masks"),
     },
     "test": {
         "cloudy": Path("data/test/south_america_s2_cloudy"),
-        "masks":  Path("data/test/south_america_s2_masks"),
+        "masks": Path("data/test/south_america_s2_masks"),
     },
 }
 
@@ -29,10 +29,10 @@ def mask_filename(cloudy_name: str) -> str:
 
 def generate_mask(tif_path: Path) -> tuple[np.ndarray, dict]:
     with rasterio.open(tif_path) as src:
-        b03     = src.read(indexes=B03_IDX).astype(np.float32) / 10000.0
+        b03 = src.read(indexes=B03_IDX).astype(np.float32) / 10000.0
         profile = src.profile
 
-    threshold  = threshold_otsu(b03) + OTSU_OFFSET
+    threshold = threshold_otsu(b03) + OTSU_OFFSET
     cloud_mask = (b03 > threshold).astype(np.uint8)  # [H, W]
 
     return cloud_mask, profile
@@ -49,7 +49,7 @@ def save_mask(mask: np.ndarray, profile: dict, out_path: Path) -> None:
 def main() -> None:
     for split, paths in SPLITS.items():
         cloudy_folder = paths["cloudy"]
-        masks_folder  = paths["masks"]
+        masks_folder = paths["masks"]
 
         if not cloudy_folder.exists():
             continue
@@ -59,9 +59,9 @@ def main() -> None:
         tifs = sorted(cloudy_folder.glob("*.tif"))
         print(f"\n[{split}] {len(tifs)} imágenes en {cloudy_folder}")
 
-        ok      = 0
+        ok = 0
         skipped = 0
-        errors  = 0
+        errors = 0
 
         for i, tif_path in enumerate(tifs, 1):
             out_path = masks_folder / mask_filename(tif_path.name)

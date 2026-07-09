@@ -9,10 +9,10 @@ import sys
 from pathlib import Path
 from PIL import Image, ImageTk
 
-ROOT       = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent
 MODELS_DIR = ROOT / "models"
-UTILS_DIR  = ROOT / "utils"
-DATA_DIR   = ROOT / "dataset"
+UTILS_DIR = ROOT / "utils"
+DATA_DIR = ROOT / "dataset"
 
 sys.path.append(str(DATA_DIR))
 sys.path.append(str(MODELS_DIR))
@@ -25,10 +25,10 @@ from dbcr_utils import inference
 from dataset_utils import unpack_batch
 from evaluate_utils import psnr
 
-S2_PATH           = ROOT / "visualize" / "s2_6bands.npy"
-S1_PATH           = ROOT / "visualize" / "s1_2bands.npy"
-RESULTS_PATH      = ROOT / "visualize" / "mos_results.json"
-CACHE_DIR         = ROOT / "visualize" / "inference_cache"
+S2_PATH = ROOT / "visualize" / "s2_6bands.npy"
+S1_PATH = ROOT / "visualize" / "s1_2bands.npy"
+RESULTS_PATH = ROOT / "visualize" / "mos_results.json"
+CACHE_DIR = ROOT / "visualize" / "inference_cache"
 CLOUDY_IMAGES_DIR = ROOT / "visualize"
 
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -39,9 +39,9 @@ CLOUDY_IMAGES = {
     "Cloudy 03": CLOUDY_IMAGES_DIR / "s2_6bands_cloudy_03.npy",
 }
 
-REPO_ID   = "LucioLuque/lama"
-T         = 1000
-STEPS     = 10
+REPO_ID = "LucioLuque/lama"
+T = 1000
+STEPS = 10
 SIGMOID_K = 10.0
 
 S1_MEAN = np.array([-8.999908447265625, -14.78221321105957], dtype=np.float32)
@@ -54,7 +54,7 @@ def normalize_s2(s2_raw):
 
 def normalize_s1(s1_raw):
     mean = S1_MEAN[:, None, None]
-    std  = S1_STD[:, None, None]
+    std = S1_STD[:, None, None]
     return ((s1_raw - mean) / (std + 1e-6)).astype(np.float32)
 
 def to_rgb_np(arr_chw, bands=(2, 1, 0)):
@@ -85,7 +85,7 @@ def load_models(device):
 
     def load_simple(filename, sar_mode):
         condition_channels = 8 if sar_mode == "Concat" else 6
-        ckpt  = download_model(repo_id=REPO_ID, filename=filename, map_location=device)
+        ckpt = download_model(repo_id=REPO_ID, filename=filename, map_location=device)
         state = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
         model = DBCRSimple(image_channels=6, condition_channels=condition_channels,
                            base_channels=64, time_dim=128, control_net=(sar_mode == "ControlNet"))
@@ -93,7 +93,7 @@ def load_models(device):
         return model.float().to(device).eval()
 
     def load_complex(filename):
-        ckpt  = download_model(repo_id=REPO_ID, filename=filename, map_location=device)
+        ckpt = download_model(repo_id=REPO_ID, filename=filename, map_location=device)
         model = DBCR(image_channels=6, condition_channels=6, sar_channels=2,
                      base_channels=64, time_dim=128, num_heads=1,
                      window_size_sf0=8, window_size_not_sf0=None,
@@ -102,9 +102,9 @@ def load_models(device):
         return model.float().to(device).eval()
 
     return {
-        "DBCR-S":           (load_simple("dbcr_no_sar_naf_v2.pth", "None"),      "None",       "simple"),
+        "DBCR-S": (load_simple("dbcr_no_sar_naf_v2.pth", "None"),      "None",       "simple"),
         "DBCR-SC (sin TL)": (load_simple("dbcr_concat_v2.pth",     "Concat"),    "Concat",     "simple"),
-        "DBCR":             (load_complex("dbcr_complex_v7.pth"),                 "ControlNet", "complex"),
+        "DBCR": (load_complex("dbcr_complex_v7.pth"),                 "ControlNet", "complex"),
     }
 
 def get_cache_path(image_name):
@@ -146,16 +146,16 @@ def run_inference(model, model_type, sar_mode, cloudy_t, s1_t, device):
         if sar_mode == "None":
             condition, sar = cloudy_b, None
         elif sar_mode == "Concat":
-            s1_b      = s1_t.unsqueeze(0).float().to(device)
+            s1_b = s1_t.unsqueeze(0).float().to(device)
             condition = torch.cat([cloudy_b, s1_b], dim=1)
-            sar       = None
+            sar = None
         else:
-            s1_b      = s1_t.unsqueeze(0).float().to(device)
+            s1_b = s1_t.unsqueeze(0).float().to(device)
             condition = cloudy_b
-            sar       = s1_b
+            sar = s1_b
         pred = inference(model, cloudy_b, condition, device, T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K, show_progress=False)
     else:
-        fake_batch              = (s1_t.unsqueeze(0).float(), cloudy_b, cloudy_b)
+        fake_batch = (s1_t.unsqueeze(0).float(), cloudy_b, cloudy_b)
         s2_cloudy, _, cond, sar = unpack_batch(fake_batch, sar_mode, device)
         pred = inference(model, s2_cloudy, cond, device, T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K)
     return pred.squeeze(0).clamp(0, 1).cpu()
@@ -187,27 +187,27 @@ def save_results(results):
 
 class MOSApp:
     def __init__(self, root, models, device):
-        self.root    = root
-        self.models  = models
-        self.device  = device
+        self.root = root
+        self.models = models
+        self.device = device
         self.results = load_results()
 
-        self.s2_raw        = np.load(S2_PATH)
-        self.s1_raw        = np.load(S1_PATH)
+        self.s2_raw = np.load(S2_PATH)
+        self.s1_raw = np.load(S1_PATH)
         self.s2_clean_norm = normalize_s2(self.s2_raw)
-        self.s1_norm       = normalize_s1(self.s1_raw)
-        self.clean_rgb_np  = to_rgb_np(self.s2_clean_norm)
-        self.sar_gray_np   = to_sar_np(self.s1_raw, band=0)
+        self.s1_norm = normalize_s1(self.s1_raw)
+        self.clean_rgb_np = to_rgb_np(self.s2_clean_norm)
+        self.sar_gray_np = to_sar_np(self.s1_raw, band=0)
 
         self.selected_image_name = None
-        self.cloudy_norm   = None
-        self.preds         = None
-        self.order         = None
-        self.psnr_values   = None
+        self.cloudy_norm = None
+        self.preds = None
+        self.order = None
+        self.psnr_values = None
 
         self.current_ranking = []
-        self.pred_frames     = {}
-        self.pred_labels     = {}
+        self.pred_frames = {}
+        self.pred_labels = {}
                 
         root.title("MOS — Evaluación de modelos")
         self._build_ui()
@@ -223,12 +223,12 @@ class MOSApp:
         self.scroll_container.pack(fill="both", expand=True)
 
         self.canvas_scroll = tk.Canvas(self.scroll_container)
-        self.scrollbar_x   = tk.Scrollbar(self.scroll_container, orient="horizontal", command=self.canvas_scroll.xview)
-        self.scrollbar_y   = tk.Scrollbar(self.scroll_container, orient="vertical", command=self.canvas_scroll.yview)
+        self.scrollbar_x = tk.Scrollbar(self.scroll_container, orient="horizontal", command=self.canvas_scroll.xview)
+        self.scrollbar_y = tk.Scrollbar(self.scroll_container, orient="vertical", command=self.canvas_scroll.yview)
         self.canvas_scroll.configure(xscrollcommand=self.scrollbar_x.set, yscrollcommand=self.scrollbar_y.set)
 
         self.scrollbar_x.pack(side="bottom", fill="x")
-        self.scrollbar_y.pack(side="right",  fill="y")
+        self.scrollbar_y.pack(side="right", fill="y")
         self.canvas_scroll.pack(side="left", fill="both", expand=True)
 
         self.frame_canvas = tk.Frame(self.canvas_scroll)
@@ -644,6 +644,6 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     models = load_models(device)
-    root   = tk.Tk()
-    app    = MOSApp(root, models, device)
+    root = tk.Tk()
+    app = MOSApp(root, models, device)
     root.mainloop()

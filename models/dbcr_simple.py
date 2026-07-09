@@ -91,7 +91,6 @@ class TimeNAFBlock(nn.Module):
 
         self.time_proj2 = nn.Linear(time_dim, channels)
 
-
         self.beta = nn.Parameter(torch.zeros(1, channels, 1, 1))
         self.gamma = nn.Parameter(torch.zeros(1, channels, 1, 1))
 

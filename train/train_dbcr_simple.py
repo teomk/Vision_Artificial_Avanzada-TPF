@@ -9,7 +9,7 @@ import yaml
 import argparse
 from torch.utils.data import DataLoader
 
-ROOT     = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "dataset"
 MODELS_DIR = ROOT / "models"
 UTILS_DIR = ROOT / "utils"
@@ -102,16 +102,16 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         cfg = yaml.safe_load(f)
 
-    sar_mode    = cfg["sar_mode"]
-    cfg_train   = cfg["train"]
-    cfg_hf      = cfg["huggingface"]
+    sar_mode = cfg["sar_mode"]
+    cfg_train = cfg["train"]
+    cfg_hf = cfg["huggingface"]
 
-    batch_size  = cfg_train["batch_size"]
+    batch_size = cfg_train["batch_size"]
     num_workers = cfg_train["num_workers"]
-    num_epochs  = cfg_train["num_epochs"]
-    lr          = cfg_train["lr"]
-    T           = cfg_train["T"]
-    sigmoid_k   = cfg_train["sigmoid_k"]
+    num_epochs = cfg_train["num_epochs"]
+    lr = cfg_train["lr"]
+    T = cfg_train["T"]
+    sigmoid_k = cfg_train["sigmoid_k"]
 
     load_filename = cfg_train.get("load_filename")
     load_filename = None if load_filename in (None, "None") else load_filename
@@ -119,14 +119,14 @@ if __name__ == "__main__":
     resume_filename = cfg_train.get("resume_filename")
     resume_filename = None if resume_filename in (None, "None") else resume_filename
 
-    repo_id       = cfg_hf["repo_id"]
+    repo_id = cfg_hf["repo_id"]
     save_filename = cfg_hf["save_filename"]
-    version       = cfg_hf["version"]
-    notes         = cfg_hf["notes"]
+    version = cfg_hf["version"]
+    notes = cfg_hf["notes"]
 
-    image_channels     = 6
-    base_channels      = 64
-    time_dim           = 128
+    image_channels = 6
+    base_channels = 64
+    time_dim = 128
 
     condition_channels = 8 if sar_mode == "Concat" else 6
 
@@ -163,7 +163,7 @@ if __name__ == "__main__":
                 old_weight.shape[0],       # 64
                 8,                          # 8 canales
                 old_weight.shape[2],       # 3
-                old_weight.shape[3],       # 3
+                old_weight.shape[3],      # 3
                 device=old_weight.device,
                 dtype=old_weight.dtype,
             )
