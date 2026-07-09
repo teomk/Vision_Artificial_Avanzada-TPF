@@ -10,7 +10,7 @@ import torch
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_RANKING_FILE = ROOT / "tools" / "dbcr_complex_v7_ranking" / "outputs" / "dbcr_complex_v7_test_psnr_ranking.json"
 
-from visualize_dbcr_complex_v7 import load_models, load_ranking_entry, plot_sample
+from tools.visualize_dbcr_complex_v7 import load_models, load_ranking_entry, plot_sample
 
 
 def resolve_save_path(rank_number: int, output_dir: Path) -> Path:

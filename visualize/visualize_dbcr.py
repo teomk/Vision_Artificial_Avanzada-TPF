@@ -66,8 +66,6 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
             pred = inference(model, cloudy_b, condition, device, T=T, steps=steps, sar=sar, sigmoid_k=sigmoid_k, show_progress=(steps>1))
             pred = pred.squeeze(0).clamp(0, 1).cpu()
 
-            # compute shared RGB stats from cloudy and clear (exclude SAR)
-            # stats = get_rgb_stats(cloudy, clear)
             stats = get_rgb_stats(cloudy)
 
             if has_sar:
@@ -78,10 +76,8 @@ def visualize_samples(model, dataset, device, sar_mode="None", n_samples=4, T=10
             for col, img in enumerate(imgs):
                 ax = fig.add_subplot(gs[row, col])
                 if has_sar and col == 1:
-                    # SAR visualization (single channel image)
                     ax.imshow(img, cmap="gray")
                 else:
-                    # For optical RGB images, apply the same stats so brightness matches
                     ax.imshow(to_rgb(img, stats=stats))
                 ax.axis("off")
                 if row == 0:
@@ -101,10 +97,10 @@ if __name__ == "__main__":
     # python visualize/visualize_dbcr.py --config configs/dbcr_controlnet.yaml
     parser = argparse.ArgumentParser(description="Visualizar predicciones DBCR")
     parser.add_argument("--config", type=str, required=True, help="Ruta al config YAML")
-    parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia iterativa (default: 10)")
-    parser.add_argument("--n_samples", type=int, default=4, help="Cantidad de muestras (default: 4)")
-    parser.add_argument("--save_path", type=str, default=None, help="Ruta para guardar la figura")
-    parser.add_argument("--seed", type=int, default=17, help="Semilla (default: 17)")
+    parser.add_argument("--steps", type=int, default=10, help="Pasos de inferencia")
+    parser.add_argument("--n_samples", type=int, default=4, help="Cantidad de muestras")
+    parser.add_argument("--save_path", type=str, default=None, help="Path")
+    parser.add_argument("--seed", type=int, default=17, help="Seed")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
@@ -120,13 +116,9 @@ if __name__ == "__main__":
     print(f"Device: {device} | SAR: {sar_mode} | Steps: {args.steps}")
 
     loaded = download_model(repo_id=repo_id, filename=save_filename, map_location=device)
-    checkpoint = (
-        loaded["model_state_dict"]
-        if isinstance(loaded, dict) and "model_state_dict" in loaded
-        else loaded
-    )
+    checkpoint = (loaded["model_state_dict"] if isinstance(loaded, dict) and "model_state_dict" in loaded else loaded)
 
-    image_channels     = 6
+    image_channels = 6
     condition_channels = 8 if sar_mode == "Concat" else 6
 
     model = DBCRSimple(image_channels=image_channels, condition_channels=condition_channels, base_channels=64, time_dim=128, control_net=(sar_mode == "ControlNet"))

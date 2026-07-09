@@ -3,7 +3,7 @@ data/
 *.ckpt
 *.pt
 *.safetensors
-visualize/review_dbcr_complex_v7/
+tools/review_dbcr_complex_v7/
 __pycache__/
 .opencode
 lib/

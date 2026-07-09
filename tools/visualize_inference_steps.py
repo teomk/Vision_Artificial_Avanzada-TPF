@@ -27,7 +27,6 @@ from evaluate_utils import psnr
 from hf_utils import download_model
 from visualize_utils import get_rgb_stats, to_rgb, to_sar
 
-# ── Config hardcodeada ────────────────────────────────────────────────
 REPO_ID = "LucioLuque/lama"
 FILENAME = "dbcr_complex_v7.pth"
 SEED = 0
@@ -38,16 +37,13 @@ STEPS_LIST = [1, 5, 10, 15, 20]
 
 COL_LABELS = ["SAR", "Nublada"] + [f"{s} steps" for s in STEPS_LIST] + ["Original"]
 
-
 def normalize_s2(s2_raw):
     return np.clip(s2_raw / 10000.0, 0, 1).astype(np.float32)
-
 
 def normalize_s1(s1_raw):
     mean = np.array([-8.999908447265625, -14.78221321105957], dtype=np.float32)[:, None, None]
     std = np.array([2.413282871246338, 2.3029115200042725], dtype=np.float32)[:, None, None]
     return ((s1_raw - mean) / (std + 1e-6)).astype(np.float32)
-
 
 def load_complex(filename, device):
     ckpt = download_model(repo_id=REPO_ID, filename=filename, map_location=device)
@@ -66,7 +62,6 @@ def load_complex(filename, device):
     model.load_state_dict(ckpt["model_state_dict"], strict=True)
     return model.float().to(device).eval()
 
-
 def run_inference(model, cloudy, s1, device, steps):
     cloudy_b = cloudy.unsqueeze(0).float().to(device)
     s1_b = s1.unsqueeze(0).float().to(device)
@@ -82,14 +77,12 @@ def run_inference(model, cloudy, s1, device, steps):
     )
     return pred.squeeze(0).clamp(0, 1).cpu()
 
-
 def load_ranking_entry(ranking_path: Path, rank_number: int) -> dict:
     data = json.loads(ranking_path.read_text(encoding="utf-8"))
     for sample in data.get("samples", []):
         if int(sample.get("rank", -1)) == rank_number:
             return sample
     raise ValueError(f"No se encontró rank={rank_number} en {ranking_path}")
-
 
 def load_sample_from_paths(paths: dict):
     with rasterio.open(paths["s1"]) as src:
@@ -103,7 +96,6 @@ def load_sample_from_paths(paths: dict):
     cloudy = torch.from_numpy(normalize_s2(cloudy_raw))
     clear = torch.from_numpy(normalize_s2(clear_raw))
     return s1, cloudy, clear
-
 
 def make_figure(model, dataset, device, rank=None, ranking_file=None):
     np.random.seed(SEED)
@@ -185,9 +177,8 @@ def make_figure(model, dataset, device, rank=None, ranking_file=None):
     print(f"Figura guardada en comparacion_steps_{SEED}.png")
     plt.close()
 
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Compara distintos steps para una muestra aleatoria o un rank del ranking v7.")
+    parser = argparse.ArgumentParser(description="Compara distintos steps.")
     parser.add_argument("--rank", type=int, default=None, help="Rank 1-based del ranking v7 a visualizar.")
     parser.add_argument("--ranking-file", default=str(RANKING_DEFAULT), help="Archivo JSON del ranking v7.")
     args = parser.parse_args()

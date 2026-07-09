@@ -23,8 +23,6 @@ from hf_utils import download_model
 from ddpm_utils import inference, build_sigmoid_ddpm_scheduler
 from visualize_utils import to_rgb, get_rgb_stats
 
-# ── Visualización ──────────────────────────────────────────────────────
-
 def visualize_samples(model, dataset, device, scheduler, sar_mode="None", n_samples=4, steps=50, save_path=None, seed=17):
     model.eval()
     np.random.seed(seed)
@@ -66,15 +64,14 @@ def visualize_samples(model, dataset, device, scheduler, sar_mode="None", n_samp
             print(f"pred  min={pred.min():.4f}  max={pred.max():.4f}  mean={pred.mean():.4f}")
             print(f"clear min={clear.min():.4f} max={clear.max():.4f} mean={clear.mean():.4f}")
 
-            # Ver los valores de las bandas RGB específicamente
             rgb_pred  = pred[[2, 1, 0]]
             print(f"pred  R={rgb_pred[0].mean():.4f}  G={rgb_pred[1].mean():.4f}  B={rgb_pred[2].mean():.4f}")
 
-            stats = get_rgb_stats(cloudy, clear)
+            stats = get_rgb_stats(cloudy)
 
             for col, img in enumerate([cloudy, pred, clear]):
                 ax = fig.add_subplot(gs[row, col])
-                if col == 1:  # pred
+                if col == 1:
                     ax.imshow(to_rgb(img, stats=None))
                 else:
                     ax.imshow(to_rgb(img, stats=stats))
@@ -88,8 +85,6 @@ def visualize_samples(model, dataset, device, scheduler, sar_mode="None", n_samp
     else:
         plt.show()
     plt.close()
-
-# ── Main ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     # python visualize/visualize_ddpm.py --config configs/ddpm_none.yaml
@@ -131,11 +126,7 @@ if __name__ == "__main__":
     model.load_state_dict(checkpoint)
     model = model.float().to(device)
 
-    scheduler = build_sigmoid_ddpm_scheduler(
-        T=T,
-        sigmoid_k=25.0,
-        alpha_min=alpha_min
-    )
+    scheduler = build_sigmoid_ddpm_scheduler(T=T, sigmoid_k=25.0, alpha_min=alpha_min)
 
     ds = SEN12MSCRDataset(split="test", include_s1=(sar_mode != "None"), include_mask=False)
 
