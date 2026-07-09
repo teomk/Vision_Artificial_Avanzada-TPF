@@ -119,7 +119,6 @@ def load_sample(dataset, idx, sar_mode, device):
     clear_b = clear.unsqueeze(0).float().to(device) if not isinstance(clear, torch.Tensor) else clear.unsqueeze(0).to(device)
     return cloudy_b, clear_b
 
-
 if __name__ == "__main__":
     # python visualize/visualize_noise.py --config configs/ddpm_none.yaml
     # python visualize/visualize_noise.py --config configs/dbcr_no_sar.yaml

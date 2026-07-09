@@ -35,12 +35,11 @@ SIGMOID_K = 10.0
 MODELS_CFG = {
     "DBCR-S":          {"filename": "dbcr_no_sar_naf_v2.pth",  "sar_mode": "None",   "type": "simple"},
     "DBCR-SC (sin TL)":{"filename": "dbcr_concat_v2.pth",      "sar_mode": "Concat", "type": "simple"},
-    "DBCR":            {"filename": "dbcr_complex_v4.pth",      "sar_mode": "ControlNet", "type": "complex"},
+    "DBCR":            {"filename": "dbcr_complex_v7.pth",      "sar_mode": "ControlNet", "type": "complex"},
 }
 
 COL_LABELS = ["SAR", "Nublada", "DBCR-S", "DBCR-SC (sin TL)", "DBCR", "Original"]
 
-# ── Carga de modelos ──────────────────────────────────────────────────
 
 def load_simple(filename, sar_mode, device):
     condition_channels = 8 if sar_mode == "Concat" else 6
@@ -55,7 +54,6 @@ def load_simple(filename, sar_mode, device):
     )
     model.load_state_dict(state, strict=False)
     return model.float().to(device).eval()
-
 
 def load_complex(filename, device):
     ckpt = download_model(repo_id=REPO_ID, filename=filename, map_location=device)
@@ -74,9 +72,7 @@ def load_complex(filename, device):
     model.load_state_dict(ckpt["model_state_dict"], strict=True)
     return model.float().to(device).eval()
 
-
 def run_inference(model, model_type, sar_mode, cloudy, s1, device):
-    """Devuelve pred [C, H, W] en CPU, clampado a [0,1]."""
     cloudy_b = cloudy.unsqueeze(0).float().to(device)
 
     if model_type == "simple":
@@ -96,16 +92,13 @@ def run_inference(model, model_type, sar_mode, cloudy, s1, device):
                          T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K,
                          show_progress=False)
 
-    else:  # complex — usa unpack_batch
-        fake_batch = (s1.unsqueeze(0).float(), cloudy_b, cloudy_b)  # clear no importa aquí
+    else:
+        fake_batch = (s1.unsqueeze(0).float(), cloudy_b, cloudy_b)
         s2_cloudy, _, condition, sar = unpack_batch(fake_batch, sar_mode, device)
         pred = inference(model, s2_cloudy, condition, device,
                          T=T, steps=STEPS, sar=sar, sigmoid_k=SIGMOID_K)
 
     return pred.squeeze(0).clamp(0, 1).cpu()
-
-
-# ── Figura ────────────────────────────────────────────────────────────
 
 def make_figure(models, dataset, device):
     np.random.seed(SEED)
@@ -113,13 +106,7 @@ def make_figure(models, dataset, device):
 
     n_cols = len(COL_LABELS)
     fig = plt.figure(figsize=(4 * n_cols, 4 * N_SAMPLES))
-    gs = gridspec.GridSpec(
-        N_SAMPLES,
-        n_cols,
-        figure=fig,
-        hspace=0.08,
-        wspace=0.05
-    )
+    gs = gridspec.GridSpec(N_SAMPLES, n_cols, figure=fig, hspace=0.08, wspace=0.05)
 
     with torch.no_grad():
         for row, idx in enumerate(tqdm(indices, desc="Muestras")):
@@ -164,11 +151,9 @@ def make_figure(models, dataset, device):
 
                 ax.axis("off")
 
-                # Títulos de columnas solo arriba
                 if row == 0:
                     ax.set_title(COL_LABELS[col], fontsize=10, pad=6)
 
-                # PSNR para cada modelo en cada fila
                 if 2 <= col <= 4:
                     psnr_val = psnr_values[col - 2]
 
@@ -189,7 +174,6 @@ def make_figure(models, dataset, device):
                         )
                     )
 
-                # Opcional: numerar la muestra al costado izquierdo
                 if col == 0:
                     ax.text(
                         -0.08,
@@ -202,7 +186,7 @@ def make_figure(models, dataset, device):
                         rotation=90
                     )
 
-    plt.savefig(f"comparacion_modelos_{SEED}.png", bbox_inches="tight", dpi=150)
+    plt.savefig(f"comparacion_modelos.png", bbox_inches="tight", dpi=150)
     print("Figura guardada en comparacion_modelos.png")
     plt.close()
 
@@ -215,7 +199,7 @@ if __name__ == "__main__":
     models = {
         "DBCR-S":           load_simple("dbcr_no_sar_naf_v2.pth",  sar_mode="None",        device=device),
         "DBCR-SC (sin TL)": load_simple("dbcr_concat_v2.pth",      sar_mode="Concat",      device=device),
-        "DBCR":             load_complex("dbcr_complex_v4.pth",                             device=device),
+        "DBCR":             load_complex("dbcr_complex_v7.pth",                             device=device),
     }
 
     ds = SEN12MSCRDataset(split="test", include_s1=True, include_mask=False)
