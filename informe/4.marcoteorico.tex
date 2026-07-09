@@ -12,7 +12,7 @@ donde $\bar{\alpha}_t \in [0,1]$ es un coeficiente acumulado que controla cuánt
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/ddpm_noise.png}
+    \includegraphics[width=\columnwidth]{../imgs/ddpm_noise_200.png}
     \caption{Efecto del scheduler sigmoidal sobre una imagen a lo largo del proceso forward, de $t=0$ (izquierda) a $t=T$ (derecha).}
     \label{fig:ddpm_noise}
 \end{figure}
@@ -129,7 +129,7 @@ Durante la inferencia, el proceso también difiere del algoritmo~\ref{alg:ddpm_i
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/dbcr_noise.png}
+    \includegraphics[width=\columnwidth]{../imgs/dbcr_noise_200.png}
     \caption{Estados intermedios del diffusion bridge entre la imagen nublada y la imagen limpia, construidos con un scheduler sigmoidal.}
     \label{fig:dbcr_noise}
 \end{figure}
@@ -149,7 +149,7 @@ Para este trabajo se implementaron distintas arquitecturas, que se describen en 
 \subsubsection{DDPM condicional}\label{sec:DDPM condicional}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/DDPM.png}
+    \includegraphics[width=\columnwidth]{../imgs/DDPM.png}
     \caption{Arquitectura DDPM condicional.}
     \label{fig:DDPM}
 \end{figure}
@@ -164,7 +164,7 @@ La segunda arquitectura implementada corresponde a una versión simplificada de 
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/DBCRSimple.png}
+    \includegraphics[width=\columnwidth]{../imgs/DBCRSimple.png}
     \caption{Arquitectura DBCR simple.}
     \label{fig:DBCRSimple}
 \end{figure}
@@ -173,7 +173,7 @@ En términos arquitectónicos, como se puede observar en la figura~\ref{fig:DBCR
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/NAFT.png}
+    \includegraphics[width=\columnwidth]{../imgs/NAFT.png}
     \caption{Estructura interna del bloque NAFT.}
     \label{fig:NAFT}
 \end{figure}
@@ -193,7 +193,7 @@ La ventaja de esta aproximación es su bajo costo arquitectónico: permite evalu
 \subsubsection{DBCR-SCN}\label{DBCR-SCN}
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/DBCRControlent.png}
+    \includegraphics[width=\columnwidth]{../imgs/DBCRControlent.png}
     \caption{Arquitectura DBCR-SCN con rama auxiliar tipo ControlNet.}
     \label{fig:DBCRControlnet}
 \end{figure}
@@ -213,7 +213,7 @@ A diferencia de las variantes anteriores, donde la información SAR se incorpora
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/SARF.png}
+    \includegraphics[width=\columnwidth]{../imgs/SARF.png}
     \caption{Estructura interna del bloque SARF.}
     \label{fig:SARF}
 \end{figure}
@@ -233,7 +233,7 @@ donde $d$ representa la dimensión de las características utilizadas en el cál
 
 \begin{figure}[H]
     \centering
-    \includegraphics[width=\columnwidth]{images/DBCR.png}
+    \includegraphics[width=\columnwidth]{../imgs/DBCR.png}
     \caption{Arquitectura DBCR.}
     \label{fig:DBCR}
 \end{figure}
