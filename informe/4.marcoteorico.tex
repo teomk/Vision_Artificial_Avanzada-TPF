@@ -1,0 +1,307 @@
+\subsection{Modelos difusivos}
+
+Los modelos difusivos constituyen una familia de modelos generativos que aprenden a revertir progresivamente un proceso de degradación. Se definen a partir de dos procesos. El primero, denominado \textit{forward}, es un proceso fijo y no aprendido que agrega ruido gaussiano a la imagen limpia de manera incremental a lo largo de $T$ pasos temporales, hasta que sea ruido puro. El segundo, denominado \textit{reverse}, es el que aprende la red: dada una muestra ruidosa en un paso $t$, el modelo estima el ruido que se le agregó, permitiendo retroceder un paso en la trayectoria.
+
+El proceso forward permite obtener directamente la muestra ruidosa en cualquier paso $t$ a partir de la imagen limpia $\mathbf{y}_0$, sin necesidad de simular los pasos intermedios:
+\begin{equation}
+    \mathbf{y}_t = \sqrt{\bar{\alpha}_t}\,\mathbf{y}_0 + \sqrt{1-\bar{\alpha}_t}\,\epsilon, \qquad \epsilon \sim \mathcal{N}(0,I)
+    \label{eq:forward}
+\end{equation}
+donde $\bar{\alpha}_t \in [0,1]$ es un coeficiente acumulado que controla cuánta señal original se conserva en el paso $t$. La trayectoria que sigue $\bar{\alpha}_t$ a lo largo de los $T$ pasos queda determinada por el \textit{noise scheduler}, que define así qué tan rápido se destruye la información de la imagen.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/ddpm_noise.png}
+    \caption{Efecto del scheduler sigmoidal sobre una imagen a lo largo del proceso forward, de $t=0$ (izquierda) a $t=T$ (derecha).}
+    \label{fig:ddpm_noise}
+\end{figure}
+
+En este trabajo se utilizó un scheduler sigmoidal, cuyo efecto sobre la imagen a lo largo del proceso forward puede observarse en la figura~\ref{fig:ddpm_noise}. Esta elección se basa en lo reportado por Guo et al.\footnote{\url{https://arxiv.org/pdf/2502.04669}}, quienes analizan distintas estrategias de planificación de ruido y señalan que el scheduler sigmoideo puede resultar favorable en imágenes de alta resolución frente a alternativas como el lineal o el coseno. Es consistente además con lo observado en DiffCR\footnote{\url{https://arxiv.org/pdf/2308.04417}}, donde se comparan estos tres schedulers y se reporta que el sigmoideo produce una adición de ruido más suave.
+
+
+Durante el entrenamiento se toma la imagen limpia, se le agrega ruido según la ecuación~\eqref{eq:forward} para un paso $t$ muestreado al azar, y la red aprende a predecir el ruido incorporado. En esta etapa la imagen nublada se utiliza como condición del modelo, de modo que el proceso de reconstrucción esté guiado por la observación óptica disponible.
+
+
+\begin{algorithm}[H]
+\caption{Entrenamiento de DDPM condicional} \label{alg:ddpm_train}
+\begin{algorithmic}[1]
+\Require Imagen nublada $\mathbf{x}$, imagen limpia $\mathbf{y}_0$, scheduler de ruido, modelo $f_\theta$
+\State Muestrear un paso temporal $t \sim \mathcal{U}(1,T)$
+\State Muestrear ruido gaussiano $\epsilon \sim \mathcal{N}(0,I)$
+\State Obtener la imagen ruidosa con el valor acumulado $\bar{\alpha}_t$: \[ \mathbf{y}_t = \sqrt{\bar{\alpha}_t}\mathbf{y}_0 + \sqrt{1-\bar{\alpha}_t}\epsilon \]
+\State Predecir el ruido: \[ \hat{\epsilon} = f_\theta(\mathbf{y}_t, t, \mathbf{x}) \]
+\State Calcular la pérdida: \[ \mathcal{L} = \left\| \epsilon - \hat{\epsilon} \right\|_2^2 \]
+\State Actualizar los parámetros de $f_\theta$ mediante descenso por gradiente
+\end{algorithmic}
+\end{algorithm} 
+
+Durante la inferencia el proceso se invierte. El modelo parte de ruido gaussiano puro y utiliza la imagen nublada como condición para guiar los pasos sucesivos de denoising hasta obtener una reconstrucción libre de nubes.
+
+
+\begin{algorithm}[H]
+\caption{Inferencia de DDPM condicional} \label{alg:ddpm_inference}
+\begin{algorithmic}[1]
+\Require Imagen nublada $\mathbf{x}$, scheduler de ruido, modelo entrenado $f_\theta$, cantidad de pasos de inferencia $N$
+\State Inicializar $\mathbf{y}_T \sim \mathcal{N}(0,I)$
+\State Definir los pasos temporales de inferencia con el scheduler
+\For{cada paso temporal $t$ desde $T$ hasta $0$}
+\State Predecir el ruido en la muestra actual: \[ \hat{\epsilon} = f_\theta(\mathbf{y}_t, t, \mathbf{x}) \]
+\State Actualizar la muestra mediante el paso inverso del scheduler: \[ \mathbf{y}_{t-1} = \text{SchedulerStep}(\mathbf{y}_t, \hat{\epsilon}, t) \]
+\EndFor \State Retornar $\hat{\mathbf{y}}_0$
+\end{algorithmic}
+\end{algorithm}
+
+
+% En su formulación clásica, el proceso de entrenamiento implica agregar ruido gaussiano a una imagen y que el modelo aprenda a estimar ese ruido, mientras que en la inferencia se realiza el proceso inverso, se aprende a eliminar ruido paso a paso para recuperar una imagen coherente. 
+
+
+% En tareas de generación de imágenes, este mecanismo permite modelar distribuciones complejas y producir resultados de alta calidad.
+
+La principal ventaja de los modelos difusivos frente a otros enfoques generativos es su capacidad para producir reconstrucciones de mayor fidelidad y con mejor preservación de detalles finos. Sin embargo, también presentan limitaciones importantes. El proceso de muestreo puede ser costoso, ya que requiere múltiples pasos de denoising, y el entrenamiento suele demandar una cantidad considerable de datos y recursos computacionales. Además, cuando se parte de ruido puro, el camino entre la entrada degradada y la imagen limpia puede resultar innecesariamente largo para una tarea de restauración, porque la imagen nublada ya contiene información útil de la escena.
+
+
+Esta última observación motiva el uso de variantes más específicas para cloud removal como DB-CR, que busca adaptar la potencia de los modelos difusivos al problema particular de la remoción de nubes.
+
+
+\subsection{DB-CR}\label{sec:dbcr paper}
+
+DB-CR, o \textit{Diffusion Bridges for Cloud Removal}\footnote{\url{https://arxiv.org/pdf/2504.03607}}, plantea una diferencia conceptual importante respecto de los modelos difusivos clásicos.
+
+A diferencia del DDPM condicional, DB-CR no entrena al modelo para predecir el ruido agregado (algoritmo~\ref{alg:ddpm_train}), sino para estimar directamente la imagen limpia a partir de un estado intermedio del puente entre la imagen limpia y la imagen nublada.
+
+
+Para un paso temporal $t$, el estado intermedio del puente se construye interpolando linealmente entre la imagen limpia y la imagen nublada:
+\begin{equation}
+    \mathbf{x}_t = (1-\lambda_t)\,\mathbf{y}_0 + \lambda_t\,\mathbf{x}
+    \label{eq:bridge}
+\end{equation}
+donde $\lambda_t \in [0,1]$ es el coeficiente del puente, definido mediante un scheduler sigmoidal. A diferencia de $\bar\alpha_t$ en la ecuación~\eqref{eq:forward}, que pondera la imagen limpia frente al ruido gaussiano, $\lambda_t$ pondera la imagen nublada: vale $\lambda_0 \approx 0$ en el extremo limpio y $\lambda_T \approx 1$ en el extremo degradado. El proceso no introduce ruido en ningún momento, la trayectoria conecta directamente ambas distribuciones.
+
+
+\begin{algorithm}[H]
+\caption{Entrenamiento de DB-CR}
+\label{alg:dbcr_train}
+\begin{algorithmic}[1]
+\Require Imagen nublada $\mathbf{x}$, imagen limpia $\mathbf{y}_0$, scheduler de ruido, modelo $f_\theta$
+\State Muestrear un paso temporal $t \sim \mathcal{U}(1,T)$
+\State Calcular el coeficiente del puente $\lambda_t$
+\State Construir la muestra intermedia:
+\[
+\mathbf{x}_t = (1-\lambda_t)\mathbf{y}_0 + \lambda_t\mathbf{x}
+\]
+\State Predecir la imagen limpia:
+\[
+\hat{\mathbf{y}}_0 = f_\theta(\mathbf{x}_t, t, \mathbf{x})
+\]
+\State Calcular la pérdida:
+\[
+\mathcal{L} = \left\| \mathbf{y}_0 - \hat{\mathbf{y}}_0 \right\|_1
+\]
+\State Actualizar los parámetros de $f_\theta$ mediante descenso por gradiente
+\end{algorithmic}
+\end{algorithm}
+
+Durante la inferencia, el proceso también difiere del algoritmo~\ref{alg:ddpm_inference}, del DDPM clásico. En lugar de comenzar desde ruido gaussiano puro, DB-CR comienza desde la imagen nublada. En cada paso, el modelo predice una estimación de la imagen limpia y luego se construye un nuevo estado intermedio del puente, combinando esa predicción con la imagen nublada original. A medida que disminuye el valor de $t$, el estado intermedio se desplaza progresivamente hacia la imagen limpia estimada.
+
+\begin{algorithm}[H]
+\caption{Inferencia de DB-CR}
+\label{alg:dbcr_inference}
+\begin{algorithmic}[1]
+\Require Imagen nublada $\mathbf{x}$, modelo entrenado $f_\theta$, scheduler de ruido, cantidad de pasos $N$
+\State Inicializar $\mathbf{x}_T = \mathbf{x}$
+\State Definir una secuencia descendente de pasos temporales desde $T$ hasta $1$
+\For{cada paso temporal $t$}
+    \State Predecir la imagen limpia:
+    \[
+    \hat{\mathbf{y}}_0 = f_\theta(\mathbf{x}_t, t, \mathbf{x})
+    \]
+    \State Calcular el paso temporal anterior $t'$
+    \State Calcular el coeficiente $\lambda_{t'}$
+    \State Actualizar el estado del puente:
+    \[
+    \mathbf{x}_{t'} = (1-\lambda_{t'})\hat{\mathbf{y}}_0 + \lambda_{t'}\mathbf{x}
+    \]
+\EndFor
+\State Retornar $\hat{\mathbf{y}}_0$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/dbcr_noise.png}
+    \caption{Estados intermedios del diffusion bridge entre la imagen nublada y la imagen limpia, construidos con un scheduler sigmoidal.}
+    \label{fig:dbcr_noise}
+\end{figure}
+
+
+La motivación detrás de DB-CR es que, en cloud removal, no resulta necesariamente óptimo destruir toda la información de la imagen y reconstruirla desde ruido. La imagen nublada contiene estructuras visibles y contexto geográfico que pueden ser aprovechados durante la restauración. Por eso, el puente de difusión busca modelar una trayectoria más directa entre la imagen degradada y la imagen limpia como se puede observar en la figura~\ref{fig:dbcr_noise}.
+
+
+DB-CR también utiliza las imágenes SAR para obtener información de la superficie terrestre aun en presencia de nubes. Para esto propone una arquitectura multimodal con ramas diferenciadas para extraer características de cada modalidad y bloques específicos de fusión entre SAR y óptico.
+
+
+\subsection{Implementaciones}
+
+%Una opcion es que implementaciones sea una seccion aparte de marco teorico.
+
+Para este trabajo se implementaron distintas arquitecturas, que se describen en las siguientes secciones y que luego serán utilizadas para comparar los resultados experimentales. Todas las variantes comparten una misma estructura general de tipo U-Net, compuesta por tres bloques de reducción de resolución, dos bloques intermedios y tres bloques de reconstrucción. Esta base permite mantener una estructura similar y comparable, diferenciándose en el tipo de proceso difusivo, los bloques internos utilizados y la forma de incorporar la información SAR.
+\subsubsection{DDPM condicional}\label{sec:DDPM condicional}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/DDPM.png}
+    \caption{Arquitectura DDPM condicional.}
+    \label{fig:DDPM}
+\end{figure}
+La primera arquitectura implementada, corresponde a un modelo DDPM condicional con bloques residuales, como se puede observar en la figura~\ref{fig:DDPM}. Esta arquitectura sigue el algoritmo de entrenamiento (\ref{alg:ddpm_train}) e inferencia (\ref{alg:ddpm_inference}) de un modelo difusivo clásico.  
+
+
+\subsubsection{DBCR-S}
+A lo largo de este trabajo, se utiliza la notación DBCR (sin guion) para referirse a las variantes propias implementadas a partir del esquema DB-CR. Estas siguen los algoritmos~\ref{alg:dbcr_train} y~\ref{alg:dbcr_inference} para entrenar e inferir.
+
+
+La segunda arquitectura implementada corresponde a una versión simplificada de DBCR, denominada DBCR-Simple, que sigue la formulación de diffusion bridge descrita en la sección~\ref{sec:dbcr paper}.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/DBCRSimple.png}
+    \caption{Arquitectura DBCR simple.}
+    \label{fig:DBCRSimple}
+\end{figure}
+
+En términos arquitectónicos, como se puede observar en la figura~\ref{fig:DBCRSimple}, el modelo mantiene la estructura U-Net, pero reemplaza los bloques residuales clásicos por bloques NAFT (\textit{Nonlinear Activation Free with Time embedding}). Estos bloques están inspirados en NAFNet\footnote{\url{https://arxiv.org/pdf/2204.04676}}, una arquitectura propuesta para restauración de imágenes que evita activaciones no lineales tradicionales y utiliza operaciones simples, como compuertas multiplicativas, para reducir complejidad computacional.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/NAFT.png}
+    \caption{Estructura interna del bloque NAFT.}
+    \label{fig:NAFT}
+\end{figure}
+
+La figura~\ref{fig:NAFT} muestra la estructura interna del bloque NAFT. El bloque está compuesto por dos ramas residuales: una primera rama tipo NAF, encargada de la extracción espacial de características, y una segunda rama tipo FFN convolucional. En ambas ramas se incorpora una proyección lineal del embedding temporal, lo que permite condicionar el bloque según el paso temporal del proceso difusivo.
+
+Las ramas NAF y FFN se incorporan mediante conexiones residuales escaladas por los parámetros aprendibles $\beta$ y $\gamma$. Estos permiten controlar cuánto aporta cada rama residual a la salida del bloque. Al inicializarse en cero, el bloque comienza comportándose de manera cercana a una identidad, lo que ayuda a estabilizar el entrenamiento.
+
+
+\subsubsection{DBCR-SC}\label{sec:DBCR-SC}
+Como primera estrategia para incorporar información SAR, se implementó una variante basada en concatenación de canales, denominada DBCR-SC (\textit{DBCR Simple with Concatenation}). En este caso, la imagen SAR de Sentinel-1 se concatena con la imagen óptica nublada utilizada como condición del modelo. Dado que la imagen SAR cuenta con dos canales, la condición pasa de tener $C$ canales ópticos a tener $C+2$ canales.
+
+Esta estrategia representa la forma más simple de fusión multimodal, ya que no requiere incorporar una rama adicional para procesar la información SAR. La modificación principal se concentra en la primera capa de la red encargada de procesar la condición, mientras que el resto de la arquitectura mantiene la misma estructura que DBCR Simple.
+
+La ventaja de esta aproximación es su bajo costo arquitectónico: permite evaluar rápidamente si la información SAR aporta información útil para la reconstrucción. Para este modelo se evaluaron dos variantes de entrenamiento: inicializando todos los pesos aleatoriamente y utilizando \textit{transfer learning} a partir del modelo DBCR-S previamente entrenado sin SAR. Esto permite analizar si partir de una representación óptica ya aprendida facilita la incorporación posterior de información radar.
+
+\subsubsection{DBCR-SCN}\label{DBCR-SCN}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/DBCRControlent.png}
+    \caption{Arquitectura DBCR-SCN con rama auxiliar tipo ControlNet.}
+    \label{fig:DBCRControlnet}
+\end{figure}
+Como segunda estrategia de incorporación SAR, se implementó una variante inspirada en ControlNet\footnote{\url{https://arxiv.org/pdf/2302.05543}}, denominada DBCR-SCN. A diferencia de DBCR-SC, donde la información SAR se concatena directamente con la condición óptica, en esta arquitectura se utiliza una rama auxiliar encargada de procesar la imagen SAR en paralelo, como se observa en la figura~\ref{fig:DBCRControlnet}.
+
+La motivación de esta estrategia es separar el procesamiento de ambas modalidades. La U-Net principal trabaja sobre el proceso de reconstrucción óptica, mientras que la rama SAR extrae características específicas de la modalidad radar y las inyecta en distintos niveles de la red. De esta manera, el modelo puede aprovechar la información estructural provista por Sentinel-1 sin forzar una fusión temprana de canales.
+
+En la arquitectura implementada, las características extraídas de SAR se incorporan mediante sumas en diferentes resoluciones del encoder-decoder. Esto permite que la información radar influya tanto en representaciones de bajo nivel, asociadas a detalles espaciales, como en representaciones más profundas, asociadas a la estructura global de la escena.
+
+El entrenamiento de esta variante se realizó en dos etapas. Primero, se entrenó el modelo DBCR-S sin SAR, de modo que la U-Net aprendiera la tarea base de reconstrucción a partir de la imagen óptica nublada. Luego, se cargaron esos pesos y se congeló la U-Net principal, entrenando únicamente la rama ControlNet asociada a SAR. Esta estrategia permite evaluar si la información radar puede mejorar una reconstrucción óptica ya aprendida sin modificar los pesos del modelo base.
+
+
+\subsubsection{DBCR}\label{sec:DBCR}
+Finalmente, se implementó una versión más compleja de DBCR, más cercana a la arquitectura propuesta en el trabajo original. Esta variante mantiene la formulación de diffusion bridge, pero incorpora la información SAR mediante bloques específicos de fusión multimodal, denominados SARF Blocks (\textit{SAR Fusion Blocks}).
+
+A diferencia de las variantes anteriores, donde la información SAR se incorporaba mediante concatenación temprana o a través de una ControlNet, en este caso la imagen SAR es procesada por una rama propia de extracción de características. Luego, esas características se fusionan progresivamente con las representaciones ópticas de la U-Net principal en diferentes niveles de resolución. De esta manera, el modelo no fuerza una mezcla inicial entre modalidades, ni un entrenamiento en dos etapas, sino que permite una integración gradual y multiescala de la información radar en una única etapa de entrenamiento.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/SARF.png}
+    \caption{Estructura interna del bloque SARF.}
+    \label{fig:SARF}
+\end{figure}
+
+Como se observa en la figura~\ref{fig:SARF}, el bloque SARF realiza una fusión basada en atención cruzada entre las características ópticas y las características SAR. En este bloque, las características provenientes de la rama óptica se utilizan para construir la consulta $Q_{opt}$, mientras que las características provenientes de la rama SAR se proyectan para obtener la clave $K_{sar}$ y el valor $V_{sar}$.
+
+La operación central del bloque consiste en calcular una matriz de atención entre $Q_{opt}$ y $K_{sar}$. Esta matriz permite estimar qué regiones o componentes de la representación SAR resultan relevantes para complementar la reconstrucción óptica. Luego, la atención obtenida se aplica sobre $V_{sar}$, generando una representación SAR adaptada al contenido óptico que está siendo procesado por la U-Net principal.
+
+La atención cruzada se puede escribir como:
+\begin{equation}
+    Att(Q_{opt}, K_{sar}, V_{sar})= \text{softmax}\left(\frac{Q_{opt}K_{sar}^{T}}{\sqrt{d}}\right)V_{sar}
+    \label{eq:cross_attention}
+\end{equation}
+
+donde $d$ representa la dimensión de las características utilizadas en el cálculo de atención.
+
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/DBCR.png}
+    \caption{Arquitectura DBCR.}
+    \label{fig:DBCR}
+\end{figure}
+
+
+La figura~\ref{fig:DBCR} muestra la arquitectura DBCR implementada. El modelo está organizado en dos ramas principales. Por un lado, la rama óptica recibe como entrada el estado intermedio del diffusion bridge junto con la imagen óptica nublada utilizada como condición. Por otro lado, la rama SAR recibe la imagen de Sentinel-1 y extrae representaciones radar en distintas escalas espaciales.
+
+Por restricciones de cómputo, el primer SARF Block fue implementado con \textit{window attention}, inspirada en el uso de ventanas locales de Swin Transformer\footnote{\url{https://arxiv.org/pdf/2103.14030}}, en lugar de atención global. La atención global calcula relaciones entre todas las posiciones espaciales del mapa de características, por lo que su costo crece cuadráticamente con la cantidad de píxeles o tokens. En cambio, la window attention divide en ventanas locales y calcula la atención únicamente dentro de cada ventana. En esta implementación se utilizó un tamaño de ventana de $8 \times 8$, reduciendo significativamente el costo de memoria y cómputo en el nivel de mayor resolución de la red. Esta decisión permite mantener el mecanismo de fusión por atención cruzada, aunque restringido a relaciones locales.
+
+
+\subsection{Métrica de entrenamiento}
+En tareas de restauración de imágenes existen diversas funciones de pérdida: algunas penalizan con mayor intensidad los errores grandes, como la MSE, mientras que otras miden errores absolutos promedio, como la MAE o L1. También existen funciones orientadas a atributos perceptuales, como la \textit{Perceptual Loss} o la pérdida adversarial.
+
+
+Para este trabajo se utilizó la misma función de pérdida que en el paper original de DBCR: la MAE loss. Esta función mide el promedio de las diferencias absolutas punto a punto entre la imagen predicha y la imagen de referencia libre de nubes. En el caso de imágenes, la comparación se realiza píxel a píxel y, para imágenes multibanda, también canal a canal. Se define de la siguiente manera:
+
+\begin{equation}
+MAE=\frac{1}{mnc}\sum_{i=0}^{m-1}\sum_{j=0}^{n-1}\sum_{k=0}^{c-1}|I(i,j,k)-K(i,j,k)|
+\label{eq:MAE_loss}
+\end{equation}
+
+donde $I$ y $K$ representan dos imágenes de dimensión $m \times n$ con $c$ canales.
+
+\subsection{Métricas de evaluación}
+
+Una vez entrenado el modelo, las métricas de evaluación buscan reportar el rendimiento del modelo sobre datos no vistos durante el entrenamiento. En las tareas de Cloud Removal se suelen utilizar las siguientes métricas específicas.
+
+La primera métrica utilizada es la misma que se utiliza en este trabajo para el entrenamiento, MAE~\eqref{eq:MAE_loss}. En esta métrica, valores más bajos indican un mejor desempeño, ya que implican una menor diferencia promedio entre la predicción y la imagen real.
+
+La segunda métrica es \textit{Peak Signal-to-Noise Ratio} (PSNR), que estima la relación entre la potencia máxima posible de una señal y la potencia del ruido que afecta la fidelidad de su representación. Suele expresarse en escala logarítmica en decibelios [dB] a partir del MSE, por medio de la siguiente fórmula:
+
+\begin{equation}
+    PSNR=10 \cdot log_{10}(\frac{MAX_I^{2}}{MSE}) 
+    % = 20 \cdot log_{10}(MAX_I)-10 \cdot log_{10}(MSE) 
+    \label{PSNR}
+\end{equation}
+donde $MAX_I$ es el valor máximo posible de un píxel en la imagen, siendo por lo general igual a 255 o 1 si la imagen está normalizada. En este caso, valores más altos de PSNR indican una mayor similitud entre la imagen reconstruida y la imagen de referencia.
+
+La tercera métrica es el Índice de similitud estructural (SSIM)\footnote{\url{https://ece.uwaterloo.ca/~z70wang/publications/ssim.pdf}}. A diferencia del PSNR, que se basa únicamente en el error píxel a píxel, SSIM busca cuantificar la similitud percibida entre dos imágenes teniendo en cuenta la información estructural. Esta métrica evalúa tres componentes: estructura $s(x,y)$, luminancia $l(x,y)$ y contraste $c(x,y)$.
+
+Dados dos parches de imagen $x$ e $y$, el SSIM se define como:
+\begin{equation}
+    SSIM(x,y)=[l(x,y)]^\alpha \cdot [c(x,y)]^\beta \cdot [s(x,y)]^\gamma
+\end{equation}
+donde comúnmente se utiliza $\alpha=\beta=\gamma=1$, lo cual simplifica la ecuación a:
+\begin{equation}
+    SSIM(x,y)=\frac{(2\mu_x\mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
+    \label{SSIM}
+\end{equation}
+siendo $\mu_x,\mu_y$ las medias locales de los parches, $\sigma_x^2, \sigma_y^2$ sus varianzas locales, $\sigma_{xy}$ la covarianza local y $C_1, C_2$ constantes pequeñas para estabilizar la división cuando el denominador es cercano a cero. En esta métrica, valores más altos indican una mayor similitud estructural entre la imagen predicha y la imagen de referencia.
+
+Finalmente, se utilizó la métrica \textit{Spectral Angle Mapper} (SAM), propuesta originalmente en el contexto del análisis de imágenes espectrales por Kruse et al. (1993)\footnote{\url{https://ui.adsabs.harvard.edu/abs/1993RSEnv..44..145K/abstract}}, y especialmente relevante en imágenes multiespectrales. A diferencia de MAE, PSNR o SSIM, que comparan principalmente diferencias espaciales o estructurales, SAM evalúa la similitud espectral entre dos imágenes. Para ello, considera cada píxel como un vector formado por sus valores en los distintos canales espectrales y calcula el ángulo entre el vector predicho y el vector de referencia.
+
+\begin{equation}
+\theta_{ij} =
+\operatorname{arccos}\left(
+\frac{I(i,j)\cdot K(i,j)}
+{\|I(i,j)\|_2 \, \|K(i,j)\|_2 + \epsilon}
+\right)
+\label{SAM_theta}
+\end{equation}
+
+\begin{equation}
+SAM(I,K)=\frac{1}{mn}\sum_{i=0}^{m-1}\sum_{j=0}^{n-1}\theta_{ij}
+\label{SAM}
+\end{equation}
+
+donde $I(i,j)$ y $K(i,j)$ son los vectores espectrales asociados al píxel $(i,j)$ de la imagen predicha y de la imagen de referencia, respectivamente; $\epsilon$ es una constante pequeña incorporada para evitar divisiones por cero. El resultado se expresa en grados. En esta métrica, valores más bajos indican una mayor similitud espectral entre la imagen reconstruida y la imagen real.
+
+
+% LO DE ARRIBA LO SAQUE DE NUESTRO TP FINAL DE VISIÓN ARTIFICIAL.

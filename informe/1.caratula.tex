@@ -1,0 +1,33 @@
+\begin{center}
+    \vspace*{0.5cm}
+    {\Huge\textbf{Técnicas de condicionamiento de modelos difusivos en Cloud Removal}}
+    
+    \vspace{0.2cm}
+    
+    {\Large Lucio Luque Materazzi, Teo Manuel Kaucher}
+
+    \vspace{0.3cm}
+    
+    {\Large lluquematerazzi@udesa.edu.ar \\ tkaucher@udesa.edu.ar}
+
+    \vspace{0.3 cm}
+
+    {\Large Ingeniería en Inteligencia Artificial}
+
+    \Large I309 Visión Artificial Avanzada
+    
+    \vspace{0.5cm}
+
+    Otoño 2026
+    
+    \vspace{0.5cm}
+
+    \begin{abstract}
+    En este trabajo se estudió el problema de \textit{cloud removal} sobre SEN12MS-CR, un dataset multimodal de imágenes satelitales que provee, para cada muestra, una imagen SAR, una imagen óptica nublada y su correspondiente imagen óptica libre de nubes. El objetivo principal fue analizar qué formulación difusiva resulta más adecuada para la tarea de reconstrucción y en qué medida la incorporación de información SAR mejora el resultado, evaluando distintas estrategias de fusión multimodal. Para ello se implementaron varias arquitecturas sobre una misma base U-Net, comparando la metodología clásica de un modelo difusivo, que parte de ruido gaussiano puro, con variantes que la reemplazan por un puente de difusión entre la imagen nublada y la limpia. Sobre esta última formulación se evaluaron además tres formas de introducir la información SAR: concatenación directa en la entrada, una rama auxiliar tipo ControlNet y bloques de fusión por atención cruzada mediante SARF Blocks.
+
+    \end{abstract}
+
+
+    \vspace{0.15cm}
+      
+\end{center}

@@ -1,0 +1,36 @@
+Se trabajó con el conjunto de datos SEN12MS-CR\footnote{\url{https://patricktum.github.io/cloud_removal/sen12mscr/}}, un dataset multimodal diseñado específicamente para tareas de remoción de nubes en imágenes satelitales. Este conjunto de datos contiene muestras provenientes de 175 regiones de interés (\textit{Regions of Interest}, ROI) distribuidas globalmente, capturadas durante una de las cuatro estaciones del año a lo largo de 2018.
+
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=0.8\textwidth]{images/triplete.png}
+%     \caption{caption}
+%     \label{fig:triplete}
+% \end{figure}
+% SI ES UNA SOLA COLUMNA!!!!!!!
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\columnwidth]{images/triplete.png}
+    \caption{Ejemplo de triplete del dataset SEN12MS-CR. De izquierda a derecha: imagen SAR de Sentinel-1 (2 canales), imagen nublada y limpia de Sentinel-2 (13 canales).}
+    \label{fig:triplete}
+\end{figure}
+
+
+Cada región dispone de múltiples muestras, donde cada una está compuesta por un triplete de imágenes: una imagen SAR adquirida por el satélite Sentinel-1, una imagen multiespectral de Sentinel-2 en la que se presentan nubes y su correspondiente imagen multiespectral libre de nubes como se puede observar en la figura~\ref{fig:triplete}. Estas muestras fueron obtenidas a partir de la misión Copernicus de la Agencia Espacial Europea (ESA). Dado que las imágenes nubladas y de referencia no necesariamente corresponden a la misma fecha de adquisición, pueden observarse diferencias en el estado de la vegetación entre ambas. Esto introduce cierta ambigüedad en la tarea de reconstrucción, ya que la imagen objetivo puede reflejar condiciones distintas a las presentes en la imagen de entrada.
+
+
+Las imágenes de Sentinel-2 cuentan con 13 canales espectrales, que cubren el espectro visible, el infrarrojo cercano (NIR) y el infrarrojo de onda corta (SWIR): B1 (aerosol costero), B2 (azul), B3 (verde), B4 (rojo), B5, B6 y B7 (red edge), B8 (NIR), B8A (red edge), B9 (vapor de agua), B10 (cirrus), B11 (SWIR 1) y B12 (SWIR 2).
+
+
+El conjunto de datos completo está compuesto por 122.218 tripletes de imágenes, donde cada muestra corresponde a un parche de 256 × 256 píxeles. Debido al gran volumen de información, el dataset ocupa comprimido aproximadamente 272 GB, lo que dificulta su manipulación y procesamiento en etapas exploratorias.
+
+Con el objetivo de comprender la problemática y desarrollar soluciones de manera eficiente, se decidió restringir el estudio únicamente a las regiones de interés ubicadas en América del Sur. Adicionalmente, se eliminaron imágenes que no contaban con sus correspondientes contrapartes dentro del triplete o estaban corruptas.
+
+
+Este preprocesamiento resultó en un subconjunto compuesto por 16 ROIs, distribuidas de la siguiente manera: 6 correspondientes al verano, 3 al otoño, 3 al invierno y 4 a la primavera. Como resultado, el conjunto de datos final utilizado en este trabajo quedó conformado por 11.084 tripletes (33.252 imágenes), ocupando un espacio total de 40.8 GB.
+
+
+Debido al costo computacional asociado a procesar las 13 bandas espectrales completas, la mayor parte de los experimentos se realizó con un subconjunto de 6: B2, B3, B4, B8, B11 y B12. Esta selección combina bandas visibles, infrarrojo cercano y SWIR, permitiendo conservar información relevante sobre color, vegetación, humedad y suelo. A su vez, los canales descartados aportan información redundante o poco útil para la reconstrucción: B1, B9 y B10 son bandas atmosféricas que no describen la superficie, incluso B10 presenta valores dos órdenes de magnitud menores al resto comportándose casi como un canal constante. Por otro lado, B5, B6, B7 y B8A son de red edge, solapándose espectralmente con B8. Posteriormente, para verificar empíricamente esta hipótesis, se realizó un experimento utilizando los 13 canales completos.
+
+
+En cuanto a la partición de los datos, se reservó una ROI de cada estación como conjunto de test, quedando las 12 ROIs restantes para entrenamiento. Dada la limitada cantidad de ROIs, no se definió un conjunto de validación independiente.

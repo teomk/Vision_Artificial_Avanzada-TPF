@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Compilar informe LaTeX",
+      "type": "shell",
+      "command": "latexmk -pdf -interaction=nonstopmode -file-line-error main.tex",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": ["$latexmk"]
+    }
+  ]
+}

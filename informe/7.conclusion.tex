@@ -1,0 +1,31 @@
+
+
+
+% Como posible extensión futura, el bloque SARF podría reemplazar la atención local fija por una variante de deformable cross-attention, donde las features ópticas predigan posiciones relevantes de muestreo sobre las features SAR. Esto permitiría una fusión más adaptativa entre modalidades, manteniendo un costo reducido al atender solo a un conjunto pequeño de puntos relevantes.
+
+% Más experimentos de búsqueda de hiperparámetros, ya sea de redes o de entrenamiento. Agregar validation
+
+% En este trabajo se presenta una aproximación basada en modelos de difusión condicionados para la reconstrucción de imágenes ópticas afectadas por nubes mediante la integración de información SAR y series temporales ópticas. La arquitectura propuesta combina bloques NAFT para el procesamiento óptico-temporal y bloques SARF para la fusión multimodal, además de embeddings temporales que condicionan el proceso generativo.
+
+% Los experimentos realizados sobre el conjunto de datos utilizado muestran que el método es capaz de recuperar estructuras espaciales y texturas relevantes, mejorando la visibilidad de áreas agrícolas y reduciendo artefactos presentes en entradas nubladas. Frente a variantes sin fusión o sin condicionamiento temporal, la propuesta produce reconstrucciones visualmente más coherentes y preserva información espectral útil para posteriores análisis de teledetección.
+
+% Se identifican también limitaciones importantes: la necesidad de una buena co-registración entre SAR y óptico, la sensibilidad al ruido inherente a SAR en ciertas condiciones y la dificultad para reconstruir regiones con oclusión persistente durante largos periodos. Además, la evaluación cuantitativa puede enriquecerse con métricas espectrales y perceptuales adicionales y con pruebas en distintas regiones geográficas y condiciones ambientales.
+
+% Como líneas futuras de trabajo proponemos: (i) mejorar la atención multimodal en el bloque SARF —por ejemplo explorando deformable cross-attention— para una fusión más adaptativa; (ii) realizar una búsqueda sistemática de hiperparámetros y arquitecturas más robustas; (iii) ampliar y diversificar el conjunto de datos y evaluar el método en tareas downstream (clasificación, estimación de índices de vegetación); y (iv) optimizar el coste computacional para facilitar su despliegue operativo.
+
+% En conjunto, los resultados presentan evidencia del potencial de modelos de difusión condicionados multimodales para mitigar el efecto de nubes en imágenes ópticas y para apoyar aplicaciones prácticas de monitoreo remoto.
+
+
+En este trabajo se implementaron y compararon distintas arquitecturas basadas en modelos difusivos para la tarea de remoción de nubes en imágenes satelitales, con el objetivo de analizar qué formulación difusiva resulta más adecuada para este problema y en qué medida la incorporación de información SAR mejora la reconstrucción óptica.
+
+
+Respecto del primer punto, los resultados muestran una ventaja clara de la formulación de diffusion bridge frente al DDPM condicional clásico. Mientras que el DDPM debe reconstruir la escena partiendo de ruido gaussiano puro, y no logra estabilizarse ni siquiera al duplicar las épocas de entrenamiento, DBCR-S alcanza un desempeño sólido ya a las 15 épocas (PSNR 27.58 dB, SSIM 0.807). Esto confirma la hipótesis que motiva a DB-CR: en cloud removal no resulta óptimo destruir toda la información de la imagen para reconstruirla desde cero, dado que la imagen nublada conserva estructura espacial y espectral aprovechable. Partir de un puente entre la imagen nublada y la limpia define una trayectoria más corta y coherente con la entrada, lo que se traduce en mejor calidad y convergencia más rápida.
+
+
+Respecto del segundo punto, la evidencia indica que la información SAR aporta mejoras, pero que la forma de fusionarla es determinante. La concatenación directa de canales (DBCR-SC) supera al baseline sin SAR, aunque resulta más efectiva al entrenarse desde el principio que mediante transfer learning, y arrastra el ruido speckle propio del radar hacia la reconstrucción, generando texturas granulares. La estrategia tipo ControlNet (DBCR-SCN), al congelar la rama principal, limita la capacidad del modelo de adaptar sus representaciones internas a la nueva modalidad y no llega a superar a la concatenación simple. Finalmente, la variante con bloques de fusión por atención cruzada (DBCR con SARF Blocks) obtiene el mejor desempeño global (PSNR 28.45 dB, SSIM 0.840, MAE 0.0274), superando tanto al baseline sin SAR como a las demás estrategias de fusión. Esto sugiere que la atención cruzada permite integrar la información radar de forma selectiva, distinguiendo entre contenido útil y ruido, algo que las estrategias más simples no logran. La comparación visual respalda esto: DBCR produce reconstrucciones más suaves, sin el sombreado excesivo de DBCR-S ni la textura ruidosa de DBCR-SC, si bien todavía persisten sombras en algunos casos.
+
+
+Por otro lado, comparando el mejor modelo de cada configuración, el subconjunto de 6 canales superó al de 13 en las cuatro métricas, lo que indica que las bandas adicionales aportaban principalmente información redundante o de mayor dificultad de ajuste, sin traducirse en una mejor reconstrucción.
+
+
+Como trabajo futuro, el primer bloque SARF de la arquitectura DBCR podría reemplazar la atención local fija por una variante de deformable cross-attention, en la que las features ópticas predigan las posiciones relevantes de muestreo sobre las features SAR. Esto permitiría una fusión más adaptativa entre modalidades manteniendo un costo acotado, al atender únicamente a un conjunto reducido de puntos relevantes. Asimismo, quedan pendientes una búsqueda de hiperparámetros más exhaustiva, tanto de arquitectura como de entrenamiento, y la incorporación de un conjunto de validación independiente, que en este trabajo no pudo definirse por la limitada cantidad de ROIs disponibles. Finalmente, sería deseable escalar el entrenamiento al dataset SEN12MS-CR completo, en lugar de restringirse a las ROIs de América del Sur, e incorporar técnicas de data augmentation que aumenten la diversidad de las muestras y ayuden a mitigar el posible sobreajuste observado al extender el entrenamiento.

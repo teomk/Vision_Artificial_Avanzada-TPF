@@ -1,0 +1,47 @@
+
+% Experimentos:
+% SIN SAR
+% * Finetunear lama para remover nubes. uso de mascaras MEDIO QUE ESTARIA; ES UNA VERGA PERO ESTA.✔️
+% * Hacer DDPM (15 y 30 ep) ✔️ Pero hay algo mal!
+% * Hacer DBCR (15 y 30 ep) ✔️
+
+% SAR
+% * Concatenar con TF (15 ep) ✔️
+% Concatenar con TF (30 ep) ️OPCIONAL
+
+% * Concatenar sin TF (30 ep) ✔️
+% * Concatenar sin TF (45 ep) ✔️
+
+% * Controlnet (15 ep) ✔️
+% * Controlnet (30 ep) ✔️
+
+% * DBCR por 15 epocas ✔️
+% * DBCR por 30 epocas ✔️
+% * DBCR por 45 epocas ✔️
+% * DBCR por 60 epocas ✔️
+
+% * DBCR 13 bandas ️15 epocas ✔️
+% * DBCR 13 bandas ️30 epocas ✔
+% * DBCR 13 bandas ️45 epocas ✔
+
+% * Data augmentation?
+
+% Experimentos que quedan si o si: 0
+% Extra: 2
+
+En todos los experimentos se incorporaron gradient clipping y un scheduler de learning rate para estabilizar la convergencia, utilizando un learning rate de $1\times10^{-4}$ y $T=1000$. En los experimentos para el scheduler sigmoidal se utilizó $k=25$ y $\alpha_{\min}=0.0001$ en los modelos difusivos clásicos (DDPM), generando las transiciones observadas en la figura~\ref{fig:ddpm_noise}, mientras que en los modelos diffusion bridge se utilizó $k=10$ resultando en los puentes de la figura~\ref{fig:dbcr_noise}. Salvo que se indique lo contrario, todos los entrenamientos se realizaron con un batch size de 8, y todas las redes se armaron con \texttt{base\_channels=64} y \texttt{time\_dim=128}. Asimismo, en todo experimento donde no se especifica la cantidad de canales de entrada, se utilizó el subconjunto de 6 bandas espectrales descrito en la sección~\ref{sec:dataset}, dado el alto costo computacional que implicaba procesar las 13 bandas completas y la hipótesis de que algunos canales no aportaban información relevante.
+
+Al evaluar cada experimento, se utilizaron 10 pasos de inferencia, siguiendo el algoritmo~\ref{alg:ddpm_inference} para los modelos DDPM y el algoritmo~\ref{alg:dbcr_inference} para los modelos DBCR.
+
+\subsection{Experimentos sin SAR}
+
+Se entrenaron los modelos~\textbf{DDPM condicional} y~\textbf{DBCR-S} en distintas configuraciones de épocas, con el objetivo de analizar qué metodología de modelos difusivos presentaba los mejores resultados.
+
+\subsection{Experimentos con SAR}
+
+\textbf{DBCR-SC} La imagen SAR de 2 bandas se concatenó directamente con la condición óptica, tal como se describe en la sección~\ref{sec:DBCR-SC}.  Se entrenaron dos versiones: la primera utilizando transfer learning a partir del mejor modelo de DBCR-S, y la segunda desde cero, con el fin de evaluar el impacto de esta técnica sobre la estabilidad del entrenamiento.
+
+\textbf{DBCR-SCN} Siguiendo el esquema de dos etapas descrito en la sección~\ref{DBCR-SCN}, se congelaron los pesos del mejor modelo de DBCR-S y se entrenó únicamente la rama ControlNet encargada de procesar la información SAR.
+
+\textbf{DBCR} Debido a la alta complejidad computacional de este modelo, producto del mecanismo de atención cruzada entre representaciones ópticas y SAR descrito en la sección~\ref{sec:DBCR}, se incorporaron distintas optimizaciones de memoria adicionales al uso de ventanas de atención de $8 \times 8$ en el primer bloque SARF como se explicó anteriormente. En primer lugar, se empleó \textit{gradient checkpointing}, técnica que recalcula activaciones intermedias durante el \textit{backward pass} en lugar de almacenarlas, reduciendo el uso de memoria a costa de un mayor tiempo de cómputo\footnote{\url{https://arxiv.org/pdf/1604.06174}}. También se utilizó Flash Attention, una implementación optimizada del mecanismo de atención que reduce los accesos a memoria y acelera su cálculo\footnote{\url{https://arxiv.org/pdf/2205.14135}}. Finalmente, se incorporó \textit{autocast} mediante PyTorch AMP, lo que permite ejecutar operaciones en precisión mixta FP16/FP32 para reducir el consumo de memoria durante el entrenamiento\footnote{\url{https://docs.pytorch.org/docs/2.13/amp.html}}.
+Aun con estas optimizaciones, fue necesario utilizar un batch size de 4, alcanzando una utilización de aproximadamente 20~GB de VRAM durante el entrenamiento. Para este modelo se entrenaron dos versiones: una utilizando las 6 bandas y otra con las 13 bandas completas de Sentinel-2.

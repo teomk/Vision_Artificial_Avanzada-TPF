@@ -1,0 +1,53 @@
+\documentclass[twocolumn]{article}
+\usepackage{graphicx, amssymb, amsmath, float, multicol, apacite, multirow}
+\bibliographystyle{apacite}
+\usepackage[a4paper, left=2.5cm, right=2.5cm, top=20mm, bottom=20mm]{geometry}
+\usepackage{array}
+\usepackage{changepage}
+\usepackage[spanish]{babel}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{diagbox}
+\usepackage{footmisc}
+\usepackage[hyphens]{url}  % Habilita corte de línea
+\usepackage[hidelinks]{hyperref}
+\usepackage{breakurl}      % permite cortar URLs largas en varias líneas
+\usepackage[hyphens]{url}  % mejora los cortes en URLs
+\Urlmuskip=0mu plus 1mu    % mejora la tolerancia al corte
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\providecommand{\abs}[1]{\lvert#1\rvert}
+\begin{document}
+    \onecolumn
+    \input{1.caratula}
+
+    \begin{multicols}{2}
+    \section{Introducción}
+    \input{2.introduccion}  
+
+    \section{Conjunto de datos}\label{sec:dataset}
+    \input{3.conjunto} 
+
+    \section{Marco teórico}
+     \input{4.marcoteorico}   
+    
+    \section{Desarrollo}
+    \input{5.desarrollo}
+    
+    \end{multicols}
+    % \newpage
+    \section{Resultados}
+    \input{6.resultados}
+
+    \section{Conclusión}
+    \input{7.conclusion}
+    % \end{multicols}
+
+    \newpage
+    \section{Bibliografía}
+    \input{8.bibliografia}
+
+    % % \newpage
+    % \input{8.tabla}
+\end{document}
