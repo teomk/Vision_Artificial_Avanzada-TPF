@@ -67,7 +67,6 @@ En la tabla~\ref{tab:dbcr_bandas} se observa que la versión de 6 canales supera
 Comparando el mejor resultado de DBCR (6 canales, 60 épocas) con el mejor modelo con SAR de la tabla~\ref{tab:sar_strategies} (DBCR-SC sin TL a 30 épocas), DBCR logra superarlo en PSNR (28.45 vs.\ 27.82 dB), SSIM (0.840 vs.\ 0.801) y MAE (0.0274 vs.\ 0.0287), aunque obtiene un SAM mínimamente peor (9.82 vs.\ 9.81). Esto podría indicar que el mecanismo de fusión por atención cruzada entre las características ópticas y SAR permite una reconstrucción global de mayor calidad que la simple concatenación.
 
 
-
 \begin{figure}[H]
     \centering
     \includegraphics[width=1.0\linewidth]{../imgs/comparacion_modelos.png}
@@ -75,16 +74,11 @@ Comparando el mejor resultado de DBCR (6 canales, 60 épocas) con el mejor model
     \label{fig:comparacion_visual}
 \end{figure}
 
-\textbf{ARREGLAR ESE ESPACIO EN EL MEDIO ENTRE LAS DOS FILAS}
-
 Al observar la figura~\ref{fig:comparacion_visual} se visualiza que si bien DBCR-S logra remover las nubes de forma efectiva, tiende a mantener o generar sombras que oscurecen regiones de la imagen que en la reconstrucción original no están presentes. DBCR-SC (sin TL), por su parte, consigue eliminar la cobertura nubosa, pero introduce una textura granular y ruidosa en la reconstrucción. Este efecto es consistente con el hecho de que la concatenación directa incorpora el ruido speckle propio de la señal SAR, sin ningún mecanismo que permita al modelo separarlo, propagándolo hacia la reconstrucción final.
 
 En contraste, DBCR presenta reconstrucciones visiblemente más suaves y sin el sombreado excesivo de DBCR-S, acercándose más a la imagen original en ambos ejemplos. Sin embargo, en la segunda fila puede verse que el modelo no logra eliminar por completo las sombras en la parte superior de la imagen, lo que indica que, si bien el mecanismo de fusión mejora sustancialmente la calidad de la reconstrucción, todavía existen casos donde persisten las sombras.
 
 Estas observaciones sugieren que los bloques SARF permiten aprovechar la información SAR de forma más selectiva que una simple concatenación, logrando una superioridad en calidad visual, permitiendo separar entre información útil y ruido.
-
-
-\textbf{PONEMOS EN BENCHMARK? CREO QUE ESTA BUENO PERO YA ESTAMOS }
 
 
 % \begin{figure}[H]
