@@ -149,10 +149,9 @@ def make_figure(models, dataset, device):
                 if row == 0:
                     ax.set_title(COL_LABELS[col], fontsize=10, pad=6)
 
-    plt.savefig(f"imgs/comparacion_modelos2.png", bbox_inches="tight", dpi=150)
-    print("Figura guardada en imgs/comparacion_modelos2.png")
+    plt.savefig(f"imgs/comparacion_modelos_2.png", bbox_inches="tight", dpi=150)
+    print("Figura guardada en imgs/comparacion_modelos_2.png")
     plt.close()
-
 
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

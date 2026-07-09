@@ -91,7 +91,7 @@ def build_figure(rows):
             ax = fig.add_subplot(gs[row_idx, col])
             if img is not None:
                 ax.imshow(to_rgb(img, stats=stats))
-                ax.set_title(f"t={t_val}", fontsize=16, pad=3)
+                ax.set_title(f"t={t_val}", fontsize=20, pad=3)
             else:
                 ax.set_visible(False)
             ax.axis("off")
